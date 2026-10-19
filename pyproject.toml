@@ -1,0 +1,51 @@
+[project]
+name = "bizviz"
+version = "0.1.0"
+description = "Private, local-only personal finance dashboard"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "plaid-python",
+    "sqlcipher3>=0.6.2",
+    "keyring",
+    "cryptography",
+    "yfinance==1.7.0",
+    "httpx",
+]
+
+[project.scripts]
+bizviz = "bizviz.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bizviz"]
+include = ["src/bizviz/db/migrations/*.sql"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
