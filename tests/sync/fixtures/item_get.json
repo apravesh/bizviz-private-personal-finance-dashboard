@@ -1,0 +1,13 @@
+{
+  "item": {
+    "item_id": "item-1",
+    "institution_id": "ins_1",
+    "products": ["transactions"],
+    "billed_products": ["transactions", "investments"],
+    "available_products": ["liabilities"],
+    "consented_products": ["transactions"],
+    "error": null,
+    "consent_expiration_time": "2027-03-01T00:00:00Z"
+  },
+  "request_id": "req-item"
+}
