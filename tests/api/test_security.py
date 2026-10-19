@@ -114,3 +114,11 @@ def test_missing_frontend_serves_503_page(make_client: ClientFactory, web_dist) 
     resp = make_client().get("/")
     assert resp.status_code == 503
     assert "Frontend not built" in resp.text
+
+
+def test_errors_use_error_envelope(client: TestClient) -> None:
+    resp = client.post("/api/rules", json={"bogus": 1})
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["error"]["code"] == "invalid"
+    assert isinstance(body["error"]["message"], str)

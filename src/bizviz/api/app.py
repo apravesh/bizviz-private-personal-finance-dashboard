@@ -12,7 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 
-from bizviz.api import routes_auth, routes_data, routes_system
+from bizviz.analytics.edits import DuplicateRuleError
+from bizviz.api import routes_auth, routes_data, routes_edits, routes_system
 from bizviz.api.deps import ApiError
 from bizviz.api.security import RequestLogMiddleware, SecurityHeadersMiddleware
 from bizviz.errors import InvalidInputError, NotFoundError
@@ -58,6 +59,9 @@ def _register_error_handlers(app: FastAPI) -> None:
     def validation_error(_: Request, exc: Exception) -> Response:
         return _error(400, "invalid", "Invalid request")
 
+    def duplicate_rule(_: Request, exc: Exception) -> Response:
+        return _error(409, "rule_exists", "A rule for this merchant already exists")
+
     def http_error(_: Request, exc: Exception) -> Response:
         assert isinstance(exc, StarletteHTTPException)
         code = "not_found" if exc.status_code == 404 else "http_error"
@@ -73,6 +77,7 @@ def _register_error_handlers(app: FastAPI) -> None:
         (InvalidInputError, invalid_input),
         (ValueError, value_error),
         (RequestValidationError, validation_error),
+        (DuplicateRuleError, duplicate_rule),
         (StarletteHTTPException, http_error),
         (Exception, unexpected),
     ]
@@ -100,6 +105,7 @@ def create_app(runtime: Runtime) -> FastAPI:
     app.include_router(routes_auth.public_router)
     app.include_router(routes_auth.router)
     app.include_router(routes_data.router)
+    app.include_router(routes_edits.router)
     app.include_router(routes_system.router)
 
     @app.get("/api/health")
