@@ -1,4 +1,4 @@
-"""The `bizviz` command line: setup/update, restore, serve, status and housekeeping."""
+"""The `bizviz` command line: setup/update, restore, serve, demo, status and housekeeping."""
 
 import argparse
 import getpass
@@ -33,6 +33,7 @@ from bizviz.config import (
     KC_PLAID_CLIENT_ID,
     KC_PLAID_SECRET,
     KC_TOKEN_PREFIX,
+    PORT_DEMO,
     AppConfig,
     Env,
     load_config,
@@ -476,6 +477,14 @@ def _serve_command(env: Env, port: int | None) -> int:
     return _serve(rt, port or cfg.port)
 
 
+def _demo_command(port: int) -> int:
+    rt = build_runtime("production", demo=True)
+    print(f"BizViz demo (synthetic data): https://localhost:{port}")
+    print("Password: demo-password")
+    print("The demo uses a throwaway certificate, so your browser will show a warning.")
+    return _serve(rt, port)
+
+
 def _status_command(cli: _Cli) -> int:
     cfg, platform = cli.cfg, cli.platform
     if cli.production:
@@ -650,6 +659,9 @@ def _build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="run the service (what the LaunchAgent runs)")
     serve.add_argument("--port", type=int)
 
+    demo = sub.add_parser("demo", help="run with a synthetic dataset")
+    demo.add_argument("--port", type=int, default=PORT_DEMO)
+
     sub.add_parser("status", help="show service, sync and certificate status")
 
     rotate = sub.add_parser("rotate-cert", help="reissue the HTTPS certificate")
@@ -681,6 +693,8 @@ def main(
         if args.command == "version":
             print(__version__)
             return 0
+        if args.command == "demo":
+            return _demo_command(args.port)
         if args.command == "serve":
             return _serve_command(env, args.port)
 

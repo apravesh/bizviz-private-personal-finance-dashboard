@@ -47,7 +47,11 @@ def make_runtime(ctx: AppContext) -> Runtime:
     )
 
 
-def build_runtime(env: Env) -> Runtime:
+def build_runtime(env: Env, *, demo: bool = False) -> Runtime:
+    if demo:
+        from bizviz.demo import build_demo_runtime
+
+        return build_demo_runtime()
     cfg = load_config(env)
     configure_logging(cfg)
     platform = get_platform(cfg)

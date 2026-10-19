@@ -319,6 +319,23 @@ def test_serve_before_setup_points_at_setup(
     assert uvicorn_spy.app is None
 
 
+def test_demo_prints_url_and_password_and_serves(
+    uvicorn_spy: UvicornSpy, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["demo"]) == 0
+    out = capsys.readouterr().out
+    assert "https://localhost:8444" in out
+    assert "demo-password" in out
+    assert uvicorn_spy.port == 8444
+    assert uvicorn_spy.app is not None
+
+
+def test_demo_custom_port(uvicorn_spy: UvicornSpy, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["demo", "--port", "9001"]) == 0
+    assert "https://localhost:9001" in capsys.readouterr().out
+    assert uvicorn_spy.port == 9001
+
+
 def test_repo_location_problem_unit(tmp_path: Path) -> None:
     home = tmp_path / "me"
     assert cli.repo_location_problem(home / "bizviz", home) is None
@@ -412,3 +429,13 @@ def test_listen_socket_falls_back_to_ipv4_without_ipv6(monkeypatch: pytest.Monke
         assert sock.getsockname()[0] == "0.0.0.0"
     finally:
         sock.close()
+
+
+def test_listen_socket_port_in_use_is_a_clear_error(capsys: pytest.CaptureFixture[str]) -> None:
+    holder = cli.listen_socket(0)
+    try:
+        port = holder.getsockname()[1]
+        assert cli.main(["demo", "--port", str(port)]) == cli.EXIT_ABORTED
+        assert f"Cannot listen on port {port}" in capsys.readouterr().err
+    finally:
+        holder.close()
