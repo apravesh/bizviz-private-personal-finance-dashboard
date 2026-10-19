@@ -1,8 +1,10 @@
-"""The `bizviz` command line: setup/update and restore."""
+"""The `bizviz` command line: setup/update, restore, serve, status and housekeeping."""
 
 import argparse
 import getpass
 import os
+import shutil
+import socket
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
@@ -11,7 +13,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+import uvicorn
+
 from bizviz import __version__, certs, tokens
+from bizviz.api.app import create_app
 from bizviz.auth import revoke_all, set_dashboard_password, validate_password
 from bizviz.backup import (
     InvalidPhrase,
@@ -24,8 +29,10 @@ from bizviz.backup import (
 from bizviz.config import (
     KC_CA_KEY,
     KC_DB_KEY,
+    KC_ITEM_INDEX,
     KC_PLAID_CLIENT_ID,
     KC_PLAID_SECRET,
+    KC_TOKEN_PREFIX,
     AppConfig,
     Env,
     load_config,
@@ -37,6 +44,7 @@ from bizviz.db.connection import WrongKeyError, get_setting, set_setting, write_
 from bizviz.db.migrate import migrate
 from bizviz.platform import UnsupportedPlatformError, get_platform
 from bizviz.platform.base import Platform
+from bizviz.service import Runtime, build_runtime
 
 EXIT_ABORTED = 1
 EXIT_BAD_LOCATION = 2
@@ -45,6 +53,8 @@ EXIT_BUILD_FAILED = 4
 EXIT_RESTORE_REFUSED = 5
 EXIT_BAD_PHRASE = 6
 
+DELETE_DATA_PHRASE = "delete my data"
+DELETE_TOKENS_PHRASE = "delete my tokens"
 PASSWORD_ATTEMPTS = 3
 PHRASE_ATTEMPTS = 5
 CA_DESKTOP_NAME = "BizViz-CA.cer"
@@ -411,6 +421,215 @@ def _setup_command(cli: _Cli, args: argparse.Namespace) -> int:
     return 0
 
 
+def listen_socket(port: int) -> socket.socket:
+    """A listening socket on all interfaces; dual-stack (IPv4 and IPv6) when the host has IPv6.
+
+    asyncio sets IPV6_V6ONLY on AF_INET6 sockets it creates itself, which would lock out IPv4
+    clients, so the socket is created here with V6ONLY off and handed to uvicorn.
+    """
+    try:
+        sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    except OSError:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        address: tuple[str, int] = ("0.0.0.0", port)
+    else:
+        address = ("::", port)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sock.family == socket.AF_INET6:
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        sock.bind(address)
+        sock.listen(128)
+        sock.set_inheritable(True)
+    except OSError:
+        sock.close()
+        raise
+    return sock
+
+
+def _serve(rt: Runtime, port: int) -> int:
+    cfg = rt.ctx.cfg
+    try:
+        sock = listen_socket(port)
+    except OSError as exc:
+        raise _Abort(EXIT_ABORTED, f"Cannot listen on port {port}: {exc.strerror or exc}") from None
+    config = uvicorn.Config(
+        create_app(rt),
+        ssl_certfile=str(certs.leaf_path(cfg)),
+        ssl_keyfile=str(certs.leaf_key_path(cfg)),
+        workers=1,
+        access_log=False,
+        log_config=None,
+    )
+    try:
+        uvicorn.Server(config).run(sockets=[sock])
+    finally:
+        sock.close()
+    return 0
+
+
+def _serve_command(env: Env, port: int | None) -> int:
+    rt = build_runtime(env)
+    cfg = rt.ctx.cfg
+    if not certs.leaf_path(cfg).exists() or not certs.leaf_key_path(cfg).exists():
+        certs.issue_leaf(cfg, rt.ctx.platform.secrets, rt.ctx.now())
+    return _serve(rt, port or cfg.port)
+
+
+def _status_command(cli: _Cli) -> int:
+    cfg, platform = cli.cfg, cli.platform
+    if cli.production:
+        print(f"Service: {'running' if platform.service.is_running() else 'not running'}")
+    else:
+        print("Service: sandbox runs in the foreground (`bizviz --env sandbox serve`)")
+    print(f"Environment: {cfg.env}, port {cfg.port}")
+
+    key = platform.secrets.get(KC_DB_KEY)
+    if not cfg.db_path.exists():
+        print("Database: not set up")
+    elif not key:
+        print("Database: key missing from the Keychain (see `bizviz setup --recover-key`)")
+    else:
+        try:
+            conn = AppContext(cfg=cfg, platform=platform, db_key_hex=key).connect()
+        except WrongKeyError:
+            print("Database: the Keychain key does not open it")
+        else:
+            try:
+                rows = conn.execute(
+                    "SELECT institution_name, item_id, status, error_code, last_success_at"
+                    " FROM items WHERE removed_at IS NULL ORDER BY institution_name, item_id"
+                ).fetchall()
+            finally:
+                conn.close()
+            print(f"Connections: {len(rows)}")
+            for row in rows:
+                state = row["status"] + (f" ({row['error_code']})" if row["error_code"] else "")
+                last = row["last_success_at"] or "never"
+                print(f"  {row['institution_name'] or row['item_id']}: {state}, last sync {last}")
+
+    backups = (
+        sorted(cfg.backups_dir.glob("bizviz-????-??-??.db")) if cfg.backups_dir.exists() else []
+    )
+    print(f"Last backup: {backups[-1].name if backups else 'none'}")
+    info = certs.cert_info(cfg)
+    print(f"Certificate expires: {info['leaf_expires_at'] or 'no certificate'}")
+    print(f"CA expires: {info['ca_expires_at'] or 'no CA'}")
+    current = platform.system.local_hostname()
+    print(f"Hostname: pinned {cfg.hostname or 'not set'}, current {current}")
+    if cfg.hostname and cfg.hostname != current:
+        print(
+            "Warning: the Mac's hostname changed. Phones that use the old name keep working "
+            "until you run `bizviz rotate-cert --hostname <new name>`."
+        )
+    for label, value in (
+        ("FileVault", platform.system.filevault_enabled()),
+        ("Time Machine", platform.system.time_machine_configured()),
+    ):
+        print(f"{label}: {'unknown' if value is None else 'on' if value else 'OFF'}")
+    return 0
+
+
+def _dedupe(names: Sequence[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(names))
+
+
+def _rotate_cert_command(cli: _Cli, args: argparse.Namespace) -> int:
+    cfg, secrets = cli.cfg, cli.platform.secrets
+    now = cli.now()
+    if args.hostname:
+        previous = list(cfg.previous_hostnames)
+        if cfg.hostname and cfg.hostname != args.hostname:
+            previous.append(cfg.hostname)
+        previous = [h for h in previous if h != args.hostname]
+        cfg = replace_config(cfg, hostname=args.hostname, previous_hostnames=_dedupe(previous))
+    elif args.add_hostname:
+        if args.add_hostname != cfg.hostname:
+            cfg = replace_config(
+                cfg, extra_hostnames=_dedupe([*cfg.extra_hostnames, args.add_hostname])
+            )
+    if cfg != cli.cfg:
+        save_config(cfg)
+        cli.cfg = cfg
+    had_ca = certs.ca_path(cfg).exists() and secrets.get(KC_CA_KEY) is not None
+    if args.ca:
+        certs.rotate_ca(cfg, secrets, now)
+    certs.issue_leaf(cfg, secrets, now)
+    if args.ca or not had_ca:
+        _trust_and_export(cli)
+    if args.ca:
+        print("The CA was replaced: trust the new CA again on every device (docs/iphone-setup.md).")
+    print("The certificate was reissued.")
+    if cli.production:
+        if cli.platform.service.is_running():
+            cli.platform.service.stop()
+            cli.platform.service.start()
+            print("The service was restarted.")
+    else:
+        print(f"Restart `bizviz --env {cfg.env} serve` to pick up the new certificate.")
+    return 0
+
+
+def _reset_password_command(cli: _Cli) -> int:
+    ctx = cli.ctx()
+    password = _prompt_new_password(cli)
+    try:
+        conn = ctx.connect()
+    except WrongKeyError:
+        raise _Abort(EXIT_KEY_MISSING, "The Keychain key does not open the database.") from None
+    try:
+        set_dashboard_password(conn, password)
+        revoke_all(conn)
+    finally:
+        conn.close()
+    print("The dashboard password was changed and every signed-in device was signed out.")
+    return 0
+
+
+def _uninstall_command(cli: _Cli, args: argparse.Namespace) -> int:
+    cfg, secrets = cli.cfg, cli.platform.secrets
+    if args.delete_tokens and not args.delete_data:
+        raise _Abort(EXIT_ABORTED, "--delete-tokens requires --delete-data.")
+    if args.delete_data:
+        typed = cli.prompter.ask(f"This deletes all BizViz data. Type '{DELETE_DATA_PHRASE}': ")
+        if typed.strip() != DELETE_DATA_PHRASE:
+            raise _Abort(EXIT_ABORTED, "Confirmation did not match. Nothing was changed.")
+    if args.delete_tokens:
+        typed = cli.prompter.ask(
+            "This forgets your Plaid connections, so re-linking will use new Plaid slots. "
+            f"Type '{DELETE_TOKENS_PHRASE}': "
+        )
+        if typed.strip() != DELETE_TOKENS_PHRASE:
+            raise _Abort(EXIT_ABORTED, "Confirmation did not match. Nothing was changed.")
+
+    if cli.production:
+        cli.platform.service.uninstall()
+        print("The background service was removed.")
+    if not args.delete_data:
+        print(f"Your data was kept in {cfg.home}.")
+        return 0
+
+    if certs.ca_path(cfg).exists():
+        cli.platform.trust.untrust_ca(certs.ca_path(cfg))
+    if cfg.home.exists():
+        shutil.rmtree(cfg.home)
+    for name in (KC_DB_KEY, KC_PLAID_CLIENT_ID, KC_PLAID_SECRET, KC_CA_KEY):
+        secrets.delete(name)
+    print(f"Deleted {cfg.home} and the BizViz keys in the Keychain.")
+    if args.delete_tokens:
+        for entry in tokens.index_read(secrets):
+            secrets.delete(KC_TOKEN_PREFIX + str(entry["item_id"]))
+        secrets.delete(KC_ITEM_INDEX)
+        secrets.delete(tokens.INDEX_BACKUP_KEY)
+        print("Deleted the Plaid access tokens and the connection index from the Keychain.")
+    else:
+        print(
+            f"Kept {KC_TOKEN_PREFIX}* and {KC_ITEM_INDEX} in the Keychain, so a reinstall can "
+            "re-adopt your connections without using new Plaid slots."
+        )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bizviz")
     parser.add_argument("--env", choices=["production", "sandbox"], default="production")
@@ -427,6 +646,23 @@ def _build_parser() -> argparse.ArgumentParser:
     setup.add_argument(
         "--reconfigure-plaid", action="store_true", help="re-enter Plaid credentials"
     )
+
+    serve = sub.add_parser("serve", help="run the service (what the LaunchAgent runs)")
+    serve.add_argument("--port", type=int)
+
+    sub.add_parser("status", help="show service, sync and certificate status")
+
+    rotate = sub.add_parser("rotate-cert", help="reissue the HTTPS certificate")
+    group = rotate.add_mutually_exclusive_group()
+    group.add_argument("--hostname", metavar="NAME", help="change the pinned hostname")
+    group.add_argument("--add-hostname", metavar="NAME", help="add an extra hostname")
+    group.add_argument("--ca", action="store_true", help="replace the CA as well")
+
+    sub.add_parser("reset-password", help="set a new dashboard password")
+
+    uninstall = sub.add_parser("uninstall", help="remove the background service")
+    uninstall.add_argument("--delete-data", action="store_true")
+    uninstall.add_argument("--delete-tokens", action="store_true")
 
     sub.add_parser("version", help="print the version")
     return parser
@@ -445,6 +681,8 @@ def main(
         if args.command == "version":
             print(__version__)
             return 0
+        if args.command == "serve":
+            return _serve_command(env, args.port)
 
         cfg = load_config(env)
         try:
@@ -461,6 +699,14 @@ def main(
         match args.command:
             case "setup":
                 return _setup_command(cli, args)
+            case "status":
+                return _status_command(cli)
+            case "rotate-cert":
+                return _rotate_cert_command(cli, args)
+            case "reset-password":
+                return _reset_password_command(cli)
+            case "uninstall":
+                return _uninstall_command(cli, args)
     except _Abort as abort:
         print(abort.message, file=sys.stderr)
         return abort.code
