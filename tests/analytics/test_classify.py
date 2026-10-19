@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -5,6 +6,7 @@ import pytest
 
 from bizviz.analytics import classify as classify_module
 from bizviz.analytics.classify import compute_quality, rebuild_classification
+from bizviz.context import AppContext
 from bizviz.db.connection import Connection, get_meta
 from tests import factories as f
 from tests.analytics.conftest import TODAY, World, classification, scoped
@@ -471,3 +473,51 @@ def test_rebuild_failure_rolls_back(
         rebuild_classification(db, TODAY)
     assert get_meta(db, "data_version") == before
     assert db.execute("SELECT COUNT(*) FROM tx_classification").fetchone()[0] == 1
+
+
+def test_lost_update_protection(
+    app_ctx: AppContext, db: Connection, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bizviz.analytics import edits
+
+    world.tx("t", world.chk, "2026-02-01", 5, "FOOD_AND_DRINK")
+    rebuild_classification(db, TODAY)
+
+    real = classify_module.match_transfers
+    entered, release = threading.Event(), threading.Event()
+    state = {"first": True}
+
+    def slow(sides: Any) -> Any:
+        if state["first"]:
+            state["first"] = False
+            entered.set()
+            assert release.wait(10)
+        return real(sides)
+
+    monkeypatch.setattr(classify_module, "match_transfers", slow)
+    errors: list[BaseException] = []
+
+    def run(fn: Callable[[Connection], object]) -> None:
+        conn = app_ctx.connect()
+        try:
+            fn(conn)
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+        finally:
+            conn.close()
+
+    rebuilder = threading.Thread(target=run, args=(lambda c: rebuild_classification(c, TODAY),))
+    rebuilder.start()
+    assert entered.wait(10)
+    editor = threading.Thread(
+        target=run,
+        args=(lambda c: edits.set_override(c, "t", {"category_id": "plaid:TRAVEL"}, TODAY),),
+    )
+    editor.start()
+    editor.join(0.3)
+    assert editor.is_alive()  # blocked behind the rebuild's write unit
+    release.set()
+    rebuilder.join(10)
+    editor.join(10)
+    assert not errors
+    assert scoped(db, "t", "mine") == ("spending", "plaid:TRAVEL")
