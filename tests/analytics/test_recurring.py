@@ -2,8 +2,11 @@ from datetime import date, timedelta
 
 import pytest
 
+from bizviz.analytics.classify import rebuild_classification
 from bizviz.analytics.recurring import RecRow, detect
-from tests.analytics.conftest import TODAY
+from bizviz.db.connection import Connection
+from tests import factories as f
+from tests.analytics.conftest import TODAY, World
 
 
 def rows(key: str, start: date, gaps: list[int], amounts: list[float]) -> list[RecRow]:
@@ -138,3 +141,62 @@ def test_active_flag(cadence_gap: int, days_ago: int, active: bool) -> None:
     r = rows("m", start, [cadence_gap] * (count - 1), [10.0] * count)
     _, groups = run(r)
     assert groups[0].active is active
+
+
+# ---- through the rebuild -------------------------------------------------------------------
+
+
+def _monthly(w: World, account: str, prefix: str, name: str, n: int = 5) -> None:
+    for i in range(n):
+        d = TODAY - timedelta(days=30 * (n - i))
+        w.tx(f"{prefix}{i}", account, d.isoformat(), 15.0, "ENTERTAINMENT", name=name)
+
+
+def groups_in(db: Connection, scope: str) -> dict[str, tuple[str, int]]:
+    return {
+        r["merchant_key"]: (r["cadence"], r["count"])
+        for r in db.execute("SELECT * FROM recurring_groups WHERE scope = ?", (scope,))
+    }
+
+
+def test_rebuild_flags_and_scopes(db: Connection, world: World) -> None:
+    _monthly(world, world.chk, "c", "Netflix")
+    _monthly(world, world.joint, "j", "Gym Joint")
+    rebuild_classification(db, TODAY)
+    assert groups_in(db, "mine") == {"netflix": ("monthly", 5)}
+    assert groups_in(db, "household") == {"netflix": ("monthly", 5), "gym joint": ("monthly", 5)}
+    assert db.execute(
+        "SELECT mine_recurring, household_recurring FROM tx_classification"
+        " WHERE transaction_id = 'c0'"
+    ).fetchone()[:] == (1, 1)
+    row = db.execute(
+        "SELECT mine_recurring, household_recurring FROM tx_classification"
+        " WHERE transaction_id = 'j0'"
+    ).fetchone()
+    assert (row[0], row[1]) == (None, 1)
+
+
+def test_rebuild_rules_and_overrides(db: Connection, world: World) -> None:
+    _monthly(world, world.chk, "c", "Netflix")
+    _monthly(world, world.chk, "h", "Hulu")
+    world.tx("odd", world.chk, TODAY.isoformat(), 33.0, "FOOD_AND_DRINK", name="Diner")
+    f.make_rule(db, "netflix", recurring=False)
+    f.make_rule(db, "diner", recurring=True)
+    f.make_override(db, "h0", recurring=False)
+    rebuild_classification(db, TODAY)
+    assert groups_in(db, "mine") == {"hulu": ("monthly", 4), "diner": ("irregular", 1)}
+    flags = {
+        r[0]: r[1]
+        for r in db.execute("SELECT transaction_id, mine_recurring FROM tx_classification")
+    }
+    assert flags["c1"] == 0 and flags["h0"] == 0 and flags["h1"] == 1 and flags["odd"] == 1
+
+
+def test_non_spending_flows_never_recurring(db: Connection, world: World) -> None:
+    for i in range(5):
+        d = TODAY - timedelta(days=30 * (5 - i))
+        world.tx(
+            f"p{i}", world.chk, d.isoformat(), -3000.0, "INCOME", "INCOME_SALARY", name="Employer"
+        )
+    rebuild_classification(db, TODAY)
+    assert groups_in(db, "mine") == {}

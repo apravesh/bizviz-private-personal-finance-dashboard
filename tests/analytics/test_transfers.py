@@ -1,4 +1,8 @@
+from bizviz.analytics.classify import rebuild_classification
 from bizviz.analytics.transfers import CC_PAYMENT, Side, match_transfers
+from bizviz.db.connection import Connection
+from tests import factories as f
+from tests.analytics.conftest import TODAY, World, classification
 
 
 def side(
@@ -126,3 +130,43 @@ def test_investment_to_investment_never_pairs() -> None:
         ]
     )
     assert out == {}
+
+
+def test_investment_cash_movement_pairs_with_checking(db: Connection, world: World) -> None:
+    f.make_inv_txn(db, "dep1", world.brokerage, None, "2026-02-03", "cash", "deposit", None, -500)
+    world.tx(
+        "t1",
+        world.chk,
+        "2026-02-01",
+        500,
+        "TRANSFER_OUT",
+        "TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS",
+    )
+    f.make_inv_txn(db, "dep2", world.brokerage, None, "2026-03-03", "cash", "deposit", None, -500)
+    world.tx("t2", world.chk, "2026-03-01", 500, "TRANSFER_OUT", "TRANSFER_OUT_ACCOUNT_TRANSFER")
+    rebuild_classification(db, TODAY)
+    for tid, inv in (("t1", "dep1"), ("t2", "dep2")):
+        c = classification(db, tid)
+        assert (c["pair_transaction_id"], c["pair_kind"]) == (inv, "investment")
+        assert c["mine_flow"] == "internal" and c["household_flow"] == "internal"
+
+
+def test_investment_side_filters(db: Connection, world: World) -> None:
+    f.make_security(db, "cashsec", "CASH", is_cash_equivalent=True)
+    f.make_security(db, "stock", "ABC")
+    world.tx("c1", world.chk, "2026-02-01", 100, "TRANSFER_OUT")
+    world.tx("c2", world.chk, "2026-02-01", 200, "TRANSFER_OUT")
+    world.tx("c3", world.chk, "2026-02-01", 300, "TRANSFER_OUT")
+    world.tx("c4", world.chk, "2026-02-01", 400, "TRANSFER_OUT")
+    f.make_inv_txn(
+        db, "i1", world.brokerage, "cashsec", "2026-02-01", "transfer", "transfer", None, -100
+    )
+    f.make_inv_txn(
+        db, "i2", world.brokerage, "stock", "2026-02-01", "transfer", "transfer", 3, -200
+    )
+    f.make_inv_txn(db, "i3", world.brokerage, "stock", "2026-02-01", "buy", "buy", 3, -300)
+    f.make_inv_txn(db, "i4", world.brokerage, None, "2026-02-01", "cash", "dividend", None, -400)
+    rebuild_classification(db, TODAY)
+    assert classification(db, "c1")["pair_transaction_id"] == "i1"
+    for tid in ("c2", "c3", "c4"):
+        assert classification(db, tid)["pair_transaction_id"] is None
