@@ -1,4 +1,4 @@
-"""The `bizviz` command line: setup/update."""
+"""The `bizviz` command line: setup/update and restore."""
 
 import argparse
 import getpass
@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Protocol
 
 from bizviz import __version__, certs, tokens
-from bizviz.auth import set_dashboard_password, validate_password
+from bizviz.auth import revoke_all, set_dashboard_password, validate_password
 from bizviz.backup import (
     InvalidPhrase,
+    RestoreRefused,
     encode_recovery_phrase,
     make_premigration_hook,
     recover_key,
+    restore_backup,
 )
 from bizviz.config import (
     KC_CA_KEY,
@@ -40,6 +42,7 @@ EXIT_ABORTED = 1
 EXIT_BAD_LOCATION = 2
 EXIT_KEY_MISSING = 3
 EXIT_BUILD_FAILED = 4
+EXIT_RESTORE_REFUSED = 5
 EXIT_BAD_PHRASE = 6
 
 PASSWORD_ATTEMPTS = 3
@@ -217,7 +220,7 @@ def _setup_database(cli: _Cli) -> AppContext:
         raise _Abort(
             EXIT_KEY_MISSING,
             "Your database exists but its key is missing from the Keychain. Run "
-            "`bizviz setup --recover-key`.",
+            "`bizviz setup --recover-key` or `bizviz setup --restore <backup>`.",
         )
     if not key:
         import secrets as stdlib_secrets
@@ -305,6 +308,68 @@ def _recover_key_command(cli: _Cli) -> int:
     return 0
 
 
+def _restore_command(cli: _Cli, backup: str, force: bool) -> None:
+    cfg, secrets = cli.cfg, cli.platform.secrets
+    backup_file = Path(backup).expanduser()
+    refused = (
+        f"A database already exists at {cfg.db_path}. Nothing was changed. To replace it with "
+        "the backup, run again with --force: the old database, its backups folder and its key "
+        "are kept under .bak-<timestamp> names."
+    )
+    if not backup_file.is_file():
+        raise _Abort(EXIT_ABORTED, f"Backup file not found: {backup_file}")
+    if cfg.db_path.exists() and not force:
+        raise _Abort(EXIT_RESTORE_REFUSED, refused)
+
+    was_running = cli.production and cli.platform.service.is_running()
+    if was_running:
+        cli.platform.service.stop()
+
+    def give_up(code: int, message: str) -> _Abort:
+        if was_running:
+            cli.platform.service.start()
+        return _Abort(code, message)
+
+    phrase = cli.prompter.secret("Recovery phrase: ")
+    try:
+        result = restore_backup(cfg, secrets, backup_file, phrase, force=force, now=cli.now())
+    except RestoreRefused:
+        raise give_up(EXIT_RESTORE_REFUSED, refused) from None
+    except InvalidPhrase:
+        raise give_up(
+            EXIT_BAD_PHRASE,
+            "That recovery phrase does not open this backup. Nothing was changed.",
+        ) from None
+    except (FileNotFoundError, ValueError) as exc:
+        raise give_up(EXIT_ABORTED, f"The backup could not be restored ({exc}).") from None
+
+    for label, moved in (
+        ("old database", result.moved_db),
+        ("old backups folder", result.moved_backups),
+        ("old database key (Keychain entry)", result.old_key_entry),
+    ):
+        if moved is not None:
+            print(f"Kept the {label}: {moved}")
+
+    ctx = cli.ctx()
+    conn = ctx.connect()
+    try:
+        migrate(conn, pre_migration_backup=make_premigration_hook(ctx, conn))
+        revoke_all(conn)
+        if cli.confirm("Set a new dashboard password? [y/N] "):
+            set_dashboard_password(conn, _prompt_new_password(cli))
+        rows = conn.execute("SELECT * FROM items ORDER BY item_id").fetchall()
+    finally:
+        conn.close()
+    tokens.index_merge(secrets, [tokens.db_index_entry(r) for r in rows])
+    tokens.apply_index_removed_at(ctx)
+    tokens.mirror_all_from_db(ctx)
+    recovered = tokens.recover_tokens(ctx)
+    if recovered:
+        print(f"Re-adopted {len(recovered)} connection(s) from the Keychain index.")
+    print("Restore complete; all dashboard sessions were signed out.")
+
+
 def _setup_command(cli: _Cli, args: argparse.Namespace) -> int:
     problem = repo_location_problem(cli.cfg.repo_dir, Path.home())
     if problem:
@@ -312,8 +377,13 @@ def _setup_command(cli: _Cli, args: argparse.Namespace) -> int:
     _warn_system(cli)
     if args.recover_key:
         return _recover_key_command(cli)
+
+    restored = False
+    if args.restore:
+        _restore_command(cli, args.restore, args.force)
+        restored = True
     _ensure_plaid_credentials(cli, args.reconfigure_plaid)
-    ctx = _setup_database(cli)
+    ctx = cli.ctx() if restored else _setup_database(cli)
     _ensure_certs(cli)
     ctx = AppContext(cfg=cli.cfg, platform=cli.platform, db_key_hex=ctx.db_key_hex)
 
@@ -347,6 +417,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     setup = sub.add_parser("setup", help="set up or update BizViz (safe to re-run)")
+    setup.add_argument("--restore", metavar="FILE", help="restore from a backup file")
+    setup.add_argument(
+        "--force", action="store_true", help="allow --restore over an existing database"
+    )
     setup.add_argument(
         "--recover-key", action="store_true", help="re-store the key from the phrase"
     )
