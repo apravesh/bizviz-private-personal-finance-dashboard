@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig, type Plugin } from 'vite';
+import { assetManifestPlugin } from './build/asset-manifest-plugin';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -48,7 +49,7 @@ function bizvizBuildPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [svelte(), bizvizBuildPlugin()],
+  plugins: [svelte(), bizvizBuildPlugin(), assetManifestPlugin()],
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   build: { outDir: 'dist', emptyOutDir: true },
   test: { environment: 'jsdom' },
