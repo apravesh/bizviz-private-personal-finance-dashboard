@@ -13,11 +13,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 
 from bizviz.analytics.edits import DuplicateRuleError
-from bizviz.api import routes_auth, routes_data, routes_edits, routes_system
-from bizviz.api.deps import ApiError
+from bizviz.api import routes_auth, routes_data, routes_edits, routes_plaid, routes_system
+from bizviz.api.deps import ApiError, PlaidNotConfigured
 from bizviz.api.security import RequestLogMiddleware, SecurityHeadersMiddleware
 from bizviz.errors import InvalidInputError, NotFoundError
+from bizviz.plaid_types import PlaidError, PlaidNetworkError
 from bizviz.service import Runtime
+from bizviz.sync.linking import SlotLimitError
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +64,19 @@ def _register_error_handlers(app: FastAPI) -> None:
     def duplicate_rule(_: Request, exc: Exception) -> Response:
         return _error(409, "rule_exists", "A rule for this merchant already exists")
 
+    def slot_limit(_: Request, exc: Exception) -> Response:
+        return _error(409, "slot_limit", "All Plaid slots are used")
+
+    def plaid_error(_: Request, exc: Exception) -> Response:
+        assert isinstance(exc, PlaidError)
+        return _error(502, exc.error_code, "Plaid request failed")
+
+    def plaid_network(_: Request, exc: Exception) -> Response:
+        return _error(502, "network_error", "Could not reach Plaid")
+
+    def plaid_missing(_: Request, exc: Exception) -> Response:
+        return _error(503, "plaid_not_configured", "Plaid is not configured")
+
     def http_error(_: Request, exc: Exception) -> Response:
         assert isinstance(exc, StarletteHTTPException)
         code = "not_found" if exc.status_code == 404 else "http_error"
@@ -78,6 +93,10 @@ def _register_error_handlers(app: FastAPI) -> None:
         (ValueError, value_error),
         (RequestValidationError, validation_error),
         (DuplicateRuleError, duplicate_rule),
+        (SlotLimitError, slot_limit),
+        (PlaidError, plaid_error),
+        (PlaidNetworkError, plaid_network),
+        (PlaidNotConfigured, plaid_missing),
         (StarletteHTTPException, http_error),
         (Exception, unexpected),
     ]
@@ -106,6 +125,7 @@ def create_app(runtime: Runtime) -> FastAPI:
     app.include_router(routes_auth.router)
     app.include_router(routes_data.router)
     app.include_router(routes_edits.router)
+    app.include_router(routes_plaid.router)
     app.include_router(routes_system.router)
 
     @app.get("/api/health")

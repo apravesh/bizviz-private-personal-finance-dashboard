@@ -2,7 +2,7 @@ import re
 
 from fastapi.testclient import TestClient
 
-from bizviz.api import routes_auth, routes_data, routes_edits, routes_system
+from bizviz.api import routes_auth, routes_data, routes_edits, routes_plaid, routes_system
 from tests.api.conftest import HEADERS, PASSWORD, ClientFactory, login
 
 PROTECTED = [
@@ -24,6 +24,10 @@ PROTECTED = [
     ("POST", "/api/categories"),
     ("PATCH", "/api/categories/{category_id}"),
     ("PATCH", "/api/accounts/{account_id}"),
+    ("POST", "/api/plaid/link-token"),
+    ("POST", "/api/plaid/exchange"),
+    ("POST", "/api/plaid/items/{item_id}/repaired"),
+    ("DELETE", "/api/plaid/items/{item_id}"),
 ]
 
 
@@ -48,6 +52,7 @@ def test_every_declared_route_is_in_the_401_list() -> None:
         routes_auth.router,
         routes_data.router,
         routes_edits.router,
+        routes_plaid.router,
         routes_system.router,
     ]
     declared = {
