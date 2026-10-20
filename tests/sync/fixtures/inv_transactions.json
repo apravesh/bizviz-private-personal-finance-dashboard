@@ -1,0 +1,31 @@
+{
+  "accounts": [],
+  "investment_transactions": [
+    {
+      "investment_transaction_id": "itx-1",
+      "account_id": "acc-inv",
+      "security_id": "sec-aapl",
+      "date": "2026-09-01",
+      "name": "BUY AAPL",
+      "type": "buy",
+      "subtype": "buy",
+      "quantity": 2.0,
+      "amount": 381.004,
+      "price": 190.5,
+      "fees": 0.0
+    }
+  ],
+  "securities": [
+    {
+      "security_id": "sec-old",
+      "ticker_symbol": "OLD",
+      "name": "Old Corp",
+      "type": "equity",
+      "is_cash_equivalent": false,
+      "close_price": 1.0,
+      "close_price_as_of": "2026-01-01"
+    }
+  ],
+  "total_investment_transactions": 1,
+  "item": {"item_id": "item-1"}
+}

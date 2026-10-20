@@ -1,0 +1,35 @@
+{
+  "added": [
+    {
+      "transaction_id": "tx-1",
+      "account_id": "acc-chk",
+      "date": "2026-10-10",
+      "authorized_date": "2026-10-09",
+      "amount": 12.349,
+      "iso_currency_code": "USD",
+      "name": "COFFEE SHOP 123",
+      "merchant_name": "Coffee Shop",
+      "merchant_entity_id": "ent-1",
+      "personal_finance_category": {"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_COFFEE"},
+      "payment_channel": "in store",
+      "pending": false,
+      "pending_transaction_id": null
+    }
+  ],
+  "modified": [],
+  "removed": [],
+  "accounts": [
+    {
+      "account_id": "acc-chk",
+      "name": "Total Checking",
+      "official_name": "Total Checking Account",
+      "mask": "0001",
+      "type": "depository",
+      "subtype": "checking",
+      "balances": {"current": 100.0, "available": 90.0, "iso_currency_code": "USD"}
+    }
+  ],
+  "next_cursor": "cursor-1",
+  "has_more": true,
+  "transactions_update_status": "NOT_READY"
+}

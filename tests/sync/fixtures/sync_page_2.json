@@ -1,0 +1,25 @@
+{
+  "added": [
+    {
+      "transaction_id": "tx-2",
+      "account_id": "acc-chk",
+      "date": "2026-10-11",
+      "authorized_date": null,
+      "amount": -2500.0,
+      "iso_currency_code": "USD",
+      "name": "PAYROLL",
+      "merchant_name": null,
+      "merchant_entity_id": null,
+      "personal_finance_category": {"primary": "INCOME", "detailed": "INCOME_WAGES"},
+      "payment_channel": "other",
+      "pending": false,
+      "pending_transaction_id": null
+    }
+  ],
+  "modified": [],
+  "removed": [],
+  "accounts": [],
+  "next_cursor": "cursor-2",
+  "has_more": false,
+  "transactions_update_status": "HISTORICAL_UPDATE_COMPLETE"
+}
