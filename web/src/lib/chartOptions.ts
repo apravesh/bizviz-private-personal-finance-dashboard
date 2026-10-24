@@ -1,6 +1,13 @@
 import type { EChartsCoreOption } from 'echarts/core';
 import { money, moneyAxis } from './aggregate';
-import type { InvestmentAccountSeries, MonthlyResult, NetWorthSeriesPoint, SavingsResult } from './aggregate';
+import type {
+  CategoryBreakdown,
+  CategorySlice,
+  InvestmentAccountSeries,
+  MonthlyResult,
+  NetWorthSeriesPoint,
+  SavingsResult,
+} from './aggregate';
 import { escapeHtml, monthLabel } from './format';
 
 export const PALETTE = [
@@ -158,6 +165,41 @@ export function savingsOption(result: SavingsResult): EChartsCoreOption {
             ...(result.months[i] === result.inProgress ? { decal: CURRENT_MONTH_DECAL } : {}),
           },
         })),
+      },
+    ],
+  };
+}
+
+export function pieTooltipHtml(slice: CategorySlice, total: number): string {
+  const share = total > 0 ? Math.round((slice.value / total) * 1000) / 10 : 0;
+  return `<strong>${escapeHtml(slice.label)}</strong><br/>${money(slice.value)} (${share}%)`;
+}
+
+export function categoryPieOption(breakdown: CategoryBreakdown): EChartsCoreOption {
+  const byKey = new Map(breakdown.slices.map((s) => [s.key, s]));
+  return {
+    color: PALETTE,
+    aria: { enabled: true, decal: { show: false } },
+    animation: false,
+    legend: { type: 'scroll', bottom: 0 },
+    tooltip: {
+      trigger: 'item',
+      confine: true,
+      formatter: (params: unknown) => {
+        const slice = byKey.get((params as { data: { id: string } }).data.id);
+        return slice ? pieTooltipHtml(slice, breakdown.total) : '';
+      },
+    },
+    series: [
+      {
+        id: 'categories',
+        name: 'Spending by category',
+        type: 'pie',
+        radius: ['35%', '68%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
+        label: { formatter: '{b}\n{d}%' },
+        data: breakdown.slices.map((s) => ({ id: s.key, name: s.label, value: s.value })),
       },
     ],
   };
