@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { investmentSeries, monthlySpending, netWorthSeries } from './aggregate';
+import { investmentSeries, monthlySavings, monthlySpending, netWorthSeries } from './aggregate';
 import {
   barOption,
   barTooltipHtml,
@@ -7,6 +7,10 @@ import {
   investmentTooltipHtml,
   netWorthOption,
   netWorthTooltipHtml,
+  OVERSPENT_COLOR,
+  SAVED_COLOR,
+  savingsOption,
+  savingsTooltipHtml,
 } from './chartOptions';
 import { makePayload, TODAY } from './__fixtures__/payload';
 
@@ -59,6 +63,55 @@ describe('barOption', () => {
   it('hides the legend without a split', () => {
     const single = barOption(monthlySpending(makePayload(), 'mine', 'none', TODAY), 'Spending', true) as Opt;
     expect(single.legend.show).toBe(false);
+  });
+});
+
+describe('savingsOption', () => {
+  const result = monthlySavings(makePayload(), 'mine', TODAY);
+  const option = savingsOption(result) as Opt;
+
+  it('draws one unstacked bar series of the savings', () => {
+    expect(option.series).toHaveLength(1);
+    expect(option.series[0].stack).toBeUndefined();
+    expect(option.series[0].data.map((d: Opt) => d.value)).toEqual([-120, 2800, -80]);
+  });
+
+  it('colors saved months and overspent months differently', () => {
+    const colors = option.series[0].data.map((d: Opt) => d.itemStyle.color);
+    expect(colors).toEqual([OVERSPENT_COLOR, SAVED_COLOR, OVERSPENT_COLOR]);
+  });
+
+  it('marks only the current month as in progress', () => {
+    const data = option.series[0].data;
+    expect(data[1].itemStyle.decal).toBeUndefined();
+    expect(data[2].itemStyle.decal).toBeDefined();
+    const fmt = option.xAxis.axisLabel.formatter as (v: string) => string;
+    expect(fmt('2026-10')).toContain('in progress');
+  });
+
+  it('defaults the zoom window like the other monthly charts', () => {
+    expect(option.dataZoom.map((z: Opt) => z.type)).toEqual(['inside', 'slider']);
+    expect(option.dataZoom[0].endValue).toBe(2);
+  });
+});
+
+describe('savingsTooltipHtml', () => {
+  const result = monthlySavings(makePayload(), 'mine', TODAY);
+
+  it('shows earnings, spending and what was saved', () => {
+    const html = savingsTooltipHtml(result, 1);
+    expect(html).toContain('Sep 2026');
+    expect(html).toContain('Earnings: $3,000.00');
+    expect(html).toContain('Spending: $200.00');
+    expect(html).toContain('Saved: $2,800.00');
+    expect(html).not.toContain('includes');
+  });
+
+  it('says plainly when spending was higher, with pending noted', () => {
+    const html = savingsTooltipHtml(result, 2);
+    expect(html).toContain('Oct 2026 (in progress)');
+    expect(html).toContain('Spent more than earned: $80.00');
+    expect(html).toContain('includes -$80.00 net pending');
   });
 });
 

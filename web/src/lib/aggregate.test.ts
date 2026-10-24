@@ -5,6 +5,7 @@ import {
   money,
   moneyAxis,
   monthlyEarnings,
+  monthlySavings,
   monthlySpending,
   monthsAxis,
   netWorthSeries,
@@ -164,6 +165,36 @@ describe('monthlyEarnings', () => {
     expect(byCat.series[0].label).toBe('Income');
     const byAcc = monthlyEarnings(p, 'household', 'account', TODAY);
     expect(byAcc.series.map((s) => s.key).sort()).toEqual(['acc-checking', 'acc-joint']);
+  });
+});
+
+describe('monthlySavings', () => {
+  it('is earnings minus spending per month, with both totals kept', () => {
+    const r = monthlySavings(makePayload(), 'mine', TODAY);
+    expect(r.months).toEqual(['2026-08', '2026-09', '2026-10']);
+    expect(r.inProgress).toBe('2026-10');
+    expect(r.earnings).toEqual([30, 3000, 0]);
+    expect(r.spending).toEqual([150, 200, 80]);
+    expect(r.savings).toEqual([-120, 2800, -80]);
+  });
+
+  it('nets pending earnings against pending spending', () => {
+    expect(monthlySavings(makePayload(), 'mine', TODAY).pendingByMonth).toEqual([0, 0, -80]);
+  });
+
+  it('follows the scope like the earnings and spending charts', () => {
+    const p = makePayload();
+    const r = monthlySavings(p, 'household', TODAY);
+    const earned = monthlyEarnings(p, 'household', 'none', TODAY).totals;
+    const spent = monthlySpending(p, 'household', 'none', TODAY).totals;
+    expect(r.savings).toEqual(earned.map((e, i) => Math.round((e - spent[i]) * 100) / 100));
+    expect(r.earnings[2]).toBe(1000);
+  });
+
+  it('is all zeros for months without transactions', () => {
+    const p = makePayload();
+    p.transactions = [];
+    expect(monthlySavings(p, 'mine', TODAY).savings).toEqual([0]);
   });
 });
 

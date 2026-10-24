@@ -1,6 +1,6 @@
 import type { EChartsCoreOption } from 'echarts/core';
 import { money, moneyAxis } from './aggregate';
-import type { InvestmentAccountSeries, MonthlyResult, NetWorthSeriesPoint } from './aggregate';
+import type { InvestmentAccountSeries, MonthlyResult, NetWorthSeriesPoint, SavingsResult } from './aggregate';
 import { escapeHtml, monthLabel } from './format';
 
 export const PALETTE = [
@@ -28,8 +28,30 @@ const CURRENT_MONTH_DECAL = {
   color: 'rgba(255,255,255,0.55)',
 };
 
+export const SAVED_COLOR = '#2a9d6f';
+export const OVERSPENT_COLOR = '#d64550';
+
 export function inProgressSuffix(month: string, inProgress: string): string {
   return month === inProgress ? ' (in progress)' : '';
+}
+
+function monthZoom(n: number): object[] {
+  const startValue = Math.max(0, n - DEFAULT_ZOOM_MONTHS);
+  return [
+    { type: 'inside', startValue, endValue: n - 1, zoomLock: false },
+    { type: 'slider', startValue, endValue: n - 1, height: 24, bottom: 8 },
+  ];
+}
+
+function monthAxis(months: string[], inProgress: string): object {
+  return {
+    type: 'category',
+    data: months,
+    axisLabel: {
+      hideOverlap: true,
+      formatter: (value: string) => `${monthLabel(value)}${value === inProgress ? '\n(in progress)' : ''}`,
+    },
+  };
 }
 
 export function barTooltipHtml(
@@ -74,25 +96,9 @@ export function barOption(result: MonthlyResult, noun: 'Spending' | 'Earnings', 
         return barTooltipHtml(result, list[0].dataIndex, noun, (key) => markers.get(key) ?? '');
       },
     },
-    xAxis: {
-      type: 'category',
-      data: result.months,
-      axisLabel: {
-        hideOverlap: true,
-        formatter: (value: string) => `${monthLabel(value)}${value === result.inProgress ? '\n(in progress)' : ''}`,
-      },
-    },
+    xAxis: monthAxis(result.months, result.inProgress),
     yAxis: { type: 'value', axisLabel: { formatter: (v: number) => moneyAxis(v) } },
-    dataZoom: [
-      { type: 'inside', startValue: Math.max(0, n - DEFAULT_ZOOM_MONTHS), endValue: n - 1, zoomLock: false },
-      {
-        type: 'slider',
-        startValue: Math.max(0, n - DEFAULT_ZOOM_MONTHS),
-        endValue: n - 1,
-        height: 24,
-        bottom: 8,
-      },
-    ],
+    dataZoom: monthZoom(n),
     series: result.series.map((s) => ({
       id: s.key,
       name: s.label,
@@ -104,6 +110,56 @@ export function barOption(result: MonthlyResult, noun: 'Spending' | 'Earnings', 
         result.months[i] === result.inProgress ? { value, itemStyle: { decal: CURRENT_MONTH_DECAL } } : value,
       ),
     })),
+  };
+}
+
+export function savingsTooltipHtml(result: SavingsResult, index: number): string {
+  const month = result.months[index];
+  const saved = result.savings[index];
+  const lines = [
+    `<strong>${escapeHtml(monthLabel(month))}${inProgressSuffix(month, result.inProgress)}</strong>`,
+    `Earnings: ${money(result.earnings[index])}`,
+    `Spending: ${money(result.spending[index])}`,
+    `<strong>${saved < 0 ? 'Spent more than earned' : 'Saved'}: ${money(Math.abs(saved))}</strong>`,
+  ];
+  const pending = result.pendingByMonth[index];
+  if (pending !== 0) lines.push(`includes ${money(pending)} net pending`);
+  return lines.join('<br/>');
+}
+
+export function savingsOption(result: SavingsResult): EChartsCoreOption {
+  return {
+    aria: { enabled: true, decal: { show: false } },
+    animation: false,
+    grid: { left: 8, right: 12, top: 16, bottom: 64, containLabel: true },
+    legend: { show: false },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      confine: true,
+      formatter: (params: unknown) => {
+        const list = params as { dataIndex: number }[];
+        return list.length ? savingsTooltipHtml(result, list[0].dataIndex) : '';
+      },
+    },
+    xAxis: monthAxis(result.months, result.inProgress),
+    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => moneyAxis(v) } },
+    dataZoom: monthZoom(result.months.length),
+    series: [
+      {
+        id: 'savings',
+        name: 'Savings',
+        type: 'bar',
+        barMaxWidth: 36,
+        data: result.savings.map((value, i) => ({
+          value,
+          itemStyle: {
+            color: value < 0 ? OVERSPENT_COLOR : SAVED_COLOR,
+            ...(result.months[i] === result.inProgress ? { decal: CURRENT_MONTH_DECAL } : {}),
+          },
+        })),
+      },
+    ],
   };
 }
 
