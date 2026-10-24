@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { investmentSeries, monthlySavings, monthlySpending, netWorthSeries } from './aggregate';
+import { investmentSeries, monthlySavings, monthlySpending, netWorthSeries, spendingByCategory } from './aggregate';
 import {
   barOption,
   barTooltipHtml,
+  categoryPieOption,
   investmentOption,
   investmentTooltipHtml,
   netWorthOption,
   netWorthTooltipHtml,
   OVERSPENT_COLOR,
+  pieTooltipHtml,
   SAVED_COLOR,
   savingsOption,
   savingsTooltipHtml,
@@ -112,6 +114,30 @@ describe('savingsTooltipHtml', () => {
     expect(html).toContain('Oct 2026 (in progress)');
     expect(html).toContain('Spent more than earned: $80.00');
     expect(html).toContain('includes -$80.00 net pending');
+  });
+});
+
+describe('categoryPieOption', () => {
+  const breakdown = spendingByCategory(makePayload(), 'mine', 'last-12', TODAY);
+  const option = categoryPieOption(breakdown) as Opt;
+
+  it('draws one pie with a slice per category', () => {
+    expect(option.series).toHaveLength(1);
+    expect(option.series[0].type).toBe('pie');
+    expect(option.series[0].data).toEqual([
+      { id: 'groceries', name: 'Groceries', value: 300 },
+      { id: 'dining', name: 'Dining', value: 50 },
+    ]);
+  });
+
+  it('shows amount and share in the tooltip', () => {
+    const html = option.tooltip.formatter({ data: { id: 'dining' } }) as string;
+    expect(html).toContain('Dining');
+    expect(html).toContain('$50.00 (14.3%)');
+  });
+
+  it('escapes category names', () => {
+    expect(pieTooltipHtml({ key: 'x', label: '<b>x</b>', value: 1 }, 1)).not.toContain('<b>x');
   });
 });
 

@@ -8,6 +8,7 @@
     type SpendingSplit,
   } from '../lib/aggregate';
   import { barOption } from '../lib/chartOptions';
+  import type { Snippet } from 'svelte';
   import { store } from '../lib/store';
   import type { DataPayload } from '../lib/types';
   import Chart from './Chart.svelte';
@@ -18,9 +19,11 @@
     kind: 'spending' | 'earning';
     title: string;
     splits: { value: string; label: string }[];
+    /** Extra content shown inside the card, below the monthly chart. */
+    children?: Snippet;
   }
 
-  let { payload, kind, title, splits }: Props = $props();
+  let { payload, kind, title, splits, children }: Props = $props();
 
   let split = $state('none');
   let drill = $state<{ seriesKey: string; month: string } | null>(null);
@@ -56,6 +59,7 @@
   {/if}
   <Chart {option} label="{title} by month" onclick={openDrill} />
   <p class="muted">Pending transactions are included; the tooltip shows how much of a month is pending.</p>
+  {@render children?.()}
   {#if drill}
     <Drilldown
       {payload}

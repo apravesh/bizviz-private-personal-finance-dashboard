@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DataPayload } from '../lib/types';
   import MonthlyChart from './MonthlyChart.svelte';
+  import SpendingPie from './SpendingPie.svelte';
 
   let { payload }: { payload: DataPayload } = $props();
 </script>
@@ -16,4 +17,6 @@
     { value: 'account', label: 'Account' },
     { value: 'recurring', label: 'Recurring vs one-off' },
   ]}
-/>
+>
+  <SpendingPie {payload} />
+</MonthlyChart>

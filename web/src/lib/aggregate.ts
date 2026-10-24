@@ -256,6 +256,78 @@ export function monthlySavings(payload: DataPayload, scope: Scope, today: Today)
   };
 }
 
+export type PiePeriod = 'this-month' | 'last-month' | 'last-3' | 'last-12' | 'all';
+
+export interface CategorySlice {
+  key: string;
+  label: string;
+  value: number;
+}
+
+export interface CategoryBreakdown {
+  /** Largest first; categories past the top ones are folded into "Other". */
+  slices: CategorySlice[];
+  total: number;
+  /** First and last month covered, or null when the period has no months on the axis. */
+  from: string | null;
+  to: string | null;
+  includesInProgress: boolean;
+  /** Categories left out because refunds made their net spending zero or negative. */
+  netRefundCategories: string[];
+}
+
+const PIE_TOP = 9;
+
+function periodMonths(months: string[], current: string, period: PiePeriod): string[] {
+  const complete = months.filter((m) => m < current);
+  switch (period) {
+    case 'this-month':
+      return months.filter((m) => m === current);
+    case 'last-month':
+      return months.filter((m) => m === shiftMonth(current, -1));
+    case 'last-3':
+      return complete.slice(-3);
+    case 'last-12':
+      return complete.slice(-12);
+    case 'all':
+      return months;
+  }
+}
+
+export function spendingByCategory(
+  payload: DataPayload,
+  scope: Scope,
+  period: PiePeriod,
+  today: Today,
+): CategoryBreakdown {
+  const result = compute(payload, scope, 'spending', 'category', today).result;
+  const chosen = new Set(periodMonths(result.months, result.inProgress, period));
+  const indexes = result.months.map((m, i) => (chosen.has(m) ? i : -1)).filter((i) => i >= 0);
+  const sums = result.series.map((s) => ({
+    key: s.key,
+    label: s.label,
+    value: round2(indexes.reduce((sum, i) => sum + s.values[i], 0)),
+  }));
+  const positive = sums.filter((s) => s.value > 0).sort((a, b) => b.value - a.value || a.key.localeCompare(b.key));
+  let slices = positive;
+  if (positive.length > PIE_TOP + 1) {
+    const rest = positive.slice(PIE_TOP);
+    slices = [
+      ...positive.slice(0, PIE_TOP),
+      { key: OTHER_KEY, label: 'Other', value: round2(rest.reduce((sum, s) => sum + s.value, 0)) },
+    ];
+  }
+  const covered = result.months.filter((m) => chosen.has(m));
+  return {
+    slices,
+    total: round2(positive.reduce((sum, s) => sum + s.value, 0)),
+    from: covered[0] ?? null,
+    to: covered.at(-1) ?? null,
+    includesInProgress: chosen.has(result.inProgress),
+    netRefundCategories: sums.filter((s) => s.value < 0).map((s) => s.label),
+  };
+}
+
 export function seriesTransactions(
   payload: DataPayload,
   scope: Scope,

@@ -14,6 +14,7 @@ import {
   recurringList,
   scopeClass,
   seriesTransactions,
+  spendingByCategory,
 } from './aggregate';
 import { makePayload, TODAY, tx } from './__fixtures__/payload';
 
@@ -197,6 +198,69 @@ describe('monthlySavings', () => {
     const p = makePayload();
     p.transactions = [];
     expect(monthlySavings(p, 'mine', TODAY).savings).toEqual([0]);
+  });
+});
+
+describe('spendingByCategory', () => {
+  it('defaults to complete months only, largest category first', () => {
+    const r = spendingByCategory(makePayload(), 'mine', 'last-12', TODAY);
+    expect(r.slices).toEqual([
+      { key: 'groceries', label: 'Groceries', value: 300 },
+      { key: 'dining', label: 'Dining', value: 50 },
+    ]);
+    expect(r.total).toBe(350);
+    expect([r.from, r.to, r.includesInProgress]).toEqual(['2026-08', '2026-09', false]);
+  });
+
+  it('this month is the in-progress month and drops empty categories', () => {
+    const r = spendingByCategory(makePayload(), 'mine', 'this-month', TODAY);
+    expect(r.slices).toEqual([{ key: 'dining', label: 'Dining', value: 80 }]);
+    expect([r.from, r.to, r.includesInProgress]).toEqual(['2026-10', '2026-10', true]);
+  });
+
+  it('last month, last 3 full months and all months', () => {
+    expect(spendingByCategory(makePayload(), 'mine', 'last-month', TODAY).slices).toEqual([
+      { key: 'groceries', label: 'Groceries', value: 200 },
+    ]);
+    expect(spendingByCategory(makePayload(), 'mine', 'last-3', TODAY).total).toBe(350);
+    const all = spendingByCategory(makePayload(), 'household', 'all', TODAY);
+    expect(all.slices.map((s) => s.value)).toEqual([340, 130]);
+    expect(all.includesInProgress).toBe(true);
+  });
+
+  it('is empty when the period has no months on the axis', () => {
+    const p = makePayload();
+    p.transactions = [];
+    const r = spendingByCategory(p, 'mine', 'last-month', TODAY);
+    expect(r).toMatchObject({ slices: [], total: 0, from: null, to: null });
+  });
+
+  it('leaves out categories where refunds outweigh spending, and names them', () => {
+    const p = makePayload();
+    p.transactions.push(
+      tx('refund', '2026-09-20', -75, {
+        mine: { flow: 'spending', category_id: 'dining', recurring: false },
+      }),
+    );
+    const r = spendingByCategory(p, 'mine', 'last-12', TODAY);
+    expect(r.slices.map((s) => s.key)).toEqual(['groceries']);
+    expect(r.netRefundCategories).toEqual(['Dining']);
+    expect(r.total).toBe(300);
+  });
+
+  it('keeps the top 9 categories and folds the rest into Other', () => {
+    const p = makePayload();
+    p.transactions = [];
+    for (let i = 1; i <= 12; i++) {
+      p.transactions.push(
+        tx(`c${i}`, '2026-09-02', i * 10, { mine: { flow: 'spending', category_id: `cat${i}`, recurring: false } }),
+      );
+    }
+    const r = spendingByCategory(p, 'mine', 'last-month', TODAY);
+    expect(r.slices).toHaveLength(10);
+    expect(r.slices[0].value).toBe(120);
+    expect(r.slices[9]).toEqual({ key: 'other', label: 'Other', value: 60 });
+    expect(r.total).toBe(780);
   });
 });
 
