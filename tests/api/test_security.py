@@ -55,6 +55,14 @@ def test_index_replaces_nonce_and_matches_csp(make_client: ClientFactory) -> Non
     assert resp.headers["referrer-policy"] == "no-referrer"
 
 
+def test_index_answers_head(make_client: ClientFactory) -> None:
+    c = make_client()
+    for path in ("/", "/index.html"):
+        resp = c.head(path)
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/html")
+
+
 def test_nonce_differs_per_request(make_client: ClientFactory) -> None:
     c = make_client()
     a = re.search(r'nonce="([^"]+)"', c.get("/").text)

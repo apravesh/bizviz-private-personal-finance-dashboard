@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig, type Plugin } from 'vite';
-import { assetManifestPlugin } from './build/asset-manifest-plugin';
+import { assetManifestPlugin } from './build/asset-manifest-plugin.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 

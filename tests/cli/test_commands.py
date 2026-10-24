@@ -19,7 +19,7 @@ from bizviz.config import (
     load_config,
 )
 from bizviz.platform import get_platform
-from bizviz.platform.base import Platform
+from bizviz.platform.base import Platform, PlatformError
 from bizviz.platform.fake import FakeSystemStatus, FakeTrustStore
 from tests.cli.conftest import PASSWORD, FakeRunner, ScriptedPrompter
 from tests.cli.test_restore import NOW
@@ -119,6 +119,17 @@ def test_rotate_cert_reissues_and_restarts(installed: Platform, cfg: AppConfig) 
     assert certs.leaf_path(cfg).read_bytes() != before
     assert certs.ca_path(cfg).read_bytes() == ca_before
     assert [c[0] for c in service(installed).calls][-2:] == ["stop", "start"]
+
+
+def test_service_failure_is_reported_without_traceback(
+    installed: Platform, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fail() -> None:
+        raise PlatformError("Could not start the background service: Bootstrap failed: 5")
+
+    monkeypatch.setattr(service(installed), "start", fail)
+    assert run(installed, "rotate-cert") == cli.EXIT_ABORTED
+    assert "Could not start the background service" in capsys.readouterr().err
 
 
 def test_rotate_cert_hostname_keeps_previous_name(installed: Platform) -> None:
