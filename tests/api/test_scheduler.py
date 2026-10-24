@@ -418,3 +418,14 @@ def _wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> bool:
             return True
         deadline.wait(0.01)
     return False
+
+
+def test_loop_rebuilds_classification_once_at_start(ctx: AppContext, spies: Spies) -> None:
+    ctx.plaid = None
+    sched = Scheduler(ctx, tick_seconds=60, on_restart=lambda: None)
+    sched.start()
+    try:
+        assert _wait_for(lambda: spies.names() == ["classify"])
+    finally:
+        sched.stop()
+    assert spies.names() == ["classify"]

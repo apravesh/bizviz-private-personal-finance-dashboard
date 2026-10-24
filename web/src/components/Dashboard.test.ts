@@ -36,11 +36,11 @@ afterEach(() => {
 });
 
 describe('Dashboard', () => {
-  it('shows savings per month before earnings and spending', () => {
+  it('shows savings, earnings, spending and recurring, without investments', () => {
     store.update((s) => ({ ...s, payload: makePayload(), online: true, loaded: true }));
     mounted = mount(Dashboard, { target: document.body });
     flushSync();
     const titles = [...document.querySelectorAll('h2')].map((h) => h.textContent);
-    expect(titles.slice(0, 3)).toEqual(['Savings per month', 'Earnings per month', 'Spending per month']);
+    expect(titles).toEqual(['Savings per month', 'Earnings per month', 'Spending per month', 'Recurring charges']);
   });
 });

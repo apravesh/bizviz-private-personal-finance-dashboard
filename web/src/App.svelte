@@ -7,6 +7,7 @@
   import ConfirmDialog from './components/ConfirmDialog.svelte';
   import Dashboard from './components/Dashboard.svelte';
   import Header from './components/Header.svelte';
+  import Investments from './components/Investments.svelte';
   import Login from './components/Login.svelte';
   import Settings from './components/Settings.svelte';
   import TransactionEditorHost from './components/TransactionEditorHost.svelte';
@@ -31,6 +32,8 @@
       <p class="muted">
         {$store.online ? 'Loading your data…' : 'No data is saved on this device yet, and the Mac is unreachable.'}
       </p>
+    {:else if $route.name === 'investments'}
+      <Investments />
     {:else if $route.name === 'transactions'}
       <Transactions />
     {:else if $route.name === 'settings'}

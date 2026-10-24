@@ -119,6 +119,7 @@ class InvestmentOut(TypedDict):
     estimated: list[tuple[str, float]]
     estimate_meta: EstimateMetaOut | None
     holdings: list[HoldingOut]
+    flows: list[tuple[str, float]]
 
 
 class NetWorthScope(TypedDict):

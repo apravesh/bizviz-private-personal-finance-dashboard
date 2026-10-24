@@ -70,20 +70,20 @@ Plain SQL with DB-API; no ORM. Migrations are numbered `.sql` files, and a backu
 
 The classification rebuild is a pure function of the database. Transactions on accounts with `included=0`, and old overlapping transactions of an account superseded by a re-link, are excluded first. Only checking, savings and credit accounts are in the cash-flow views; **Mine** is those marked Mine, **Household** is all of them. Disconnected accounts stay in (their history is real).
 
-Transfers are paired first: an outflow and an inflow in different accounts with the same amount, within 5 days of each other, where at least one side looks like a transfer, never a paycheck. Investment accounts' cash movements count as counterparts. Then each transaction gets a flow and category from, in order: your override, your merchant rule, then these automatic rules:
+Transfers are paired first: an outflow and an inflow in different accounts with the same amount, within 5 days of each other, where at least one side looks like a transfer, never a paycheck. The exception is money arriving on a credit card: Plaid sometimes labels a card payment received as income, and a card never receives a paycheck, so it can still pair. Investment accounts' cash movements count as counterparts. Then each transaction gets a flow and category from, in order: your override, your merchant rule, then these automatic rules:
 
 | Rule | Situation | Counted as |
 |---|---|---|
-| A | Paired with a transaction in the same scope | Transfer (excluded) |
-| B | Paired with a linked account outside this scope (a Joint account seen from Mine) | Spending "To joint account" / earning "From joint account" |
+| A | Paired with a transaction in any linked account | Transfer (excluded) |
+| B | Paired with a linked account outside this scope (a Joint account seen from Mine) | Transfer (excluded); a joint account is still the household's own money |
 | C | Credit card payment with no matching linked card | Spending "Credit card payment (unlinked card)" |
 | D | Loan payment out (other than a card payment) | Spending, "Loan Payments" |
-| E | Unpaired transfer to or from savings or investment/retirement funds | Transfer (excluded) |
+| E | Unpaired transfer that Plaid labels as between accounts, to or from savings, or to or from investment/retirement funds | Transfer (excluded) |
 | F | Money in from loan payments or loan disbursements | Transfer (excluded) |
 | G | Money in with an income category | Earning |
-| H | Unpaired money in marked as a transfer | Earning "Money in from others" |
+| H | Other unpaired money in marked as a transfer (app transfers such as Zelle, deposits) | Earning "Money in from others" |
 | I | Any other money in (a refund) | Spending, as a negative amount |
-| J | Unpaired transfer out | Spending "Transfers out" |
+| J | Other unpaired transfer out (app transfers such as Zelle, withdrawals, wires) | Spending "Transfers out" |
 | K | Any other money out | Spending |
 
 Some details that matter:
@@ -100,6 +100,7 @@ Plaid gives no historical portfolio value, so BizViz estimates it, and always ma
 
 - **Anchor:** the first captured holdings snapshot of an account (date `A`). **Window:** the 730 days before `A`. From `A` on, actual balances are recorded and always override estimates.
 - **Prices:** Yahoo Finance daily closes. BizViz stores **unadjusted** closes (Yahoo's adjusted close multiplied by later splits), so later splits never invalidate the cache. Splits come from Yahoo's split history; Plaid's split rows are ignored because institutions report them inconsistently.
+- **Gains excluding deposits:** the Investments tab can show each account's value change since the start of its history minus net money moved in (cash deposits, withdrawals, contributions and cash transfers, the same movements that pair as transfers). Dividends, interest and fees count as gains; in-kind share transfers are not taken out.
 - **Walk backward** from the anchor: undo each investment transaction (buys, sells, in-kind transfers) and each split, tracking real share counts, and rebuild cash from the account balance. Value of a day = shares times that day's close plus cash.
 - **Excluded holdings:** positions without a usable price (no ticker, derivatives, fixed income, failed or inconsistent Yahoo data) are left out of the whole estimate. The UI says how many and how much of today's value they represent.
 - **Warnings** are stored and shown: no investment activity reported, activity reported only from some date, inconsistent reported activity, or inconsistent price data.

@@ -300,6 +300,55 @@ export function investmentSeries(
     }));
 }
 
+/**
+ * Gains of one account: value change since its first point minus the net money moved in since
+ * then, so deposits and withdrawals do not show up as growth or loss. Reported values win over
+ * estimates on the same date; each output point keeps the kind of the value it came from.
+ */
+export function accountGains(
+  actual: [string, number][],
+  estimated: [string, number][],
+  flows: [string, number][],
+): { actual: [string, number][]; estimated: [string, number][] } {
+  const values = new Map<string, { value: number; reported: boolean }>();
+  for (const [d, v] of estimated) values.set(d, { value: v, reported: false });
+  for (const [d, v] of actual) values.set(d, { value: v, reported: true });
+  const dates = [...values.keys()].sort();
+  const out = { actual: [] as [string, number][], estimated: [] as [string, number][] };
+  if (dates.length === 0) return out;
+  const start = dates[0];
+  const base = values.get(start)!.value;
+  const later = flows.filter(([d]) => d > start).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  let moved = 0;
+  let next = 0;
+  for (const d of dates) {
+    while (next < later.length && later[next][0] <= d) moved += later[next++][1];
+    const point = values.get(d)!;
+    (point.reported ? out.actual : out.estimated).push([d, round2(point.value - base - moved)]);
+  }
+  return out;
+}
+
+export function investmentGainsSeries(
+  payload: DataPayload,
+  scope: Scope,
+  granularity: Granularity,
+): InvestmentAccountSeries[] {
+  const accounts = new Map(payload.accounts.map((a) => [a.account_id, a]));
+  return payload.investments
+    .filter((inv) => scope === 'household' || inv.ownership === 'mine')
+    .map((inv) => {
+      const gains = accountGains(inv.actual, inv.estimated, inv.flows);
+      return {
+        account_id: inv.account_id,
+        label: accountLabel(accounts.get(inv.account_id), inv.account_id),
+        actual: granularity === 'monthly' ? monthlyMean(gains.actual) : gains.actual,
+        estimated: granularity === 'monthly' ? monthlyMean(gains.estimated) : gains.estimated,
+        meta: inv.estimate_meta,
+      };
+    });
+}
+
 export function netWorthSeries(
   payload: DataPayload,
   scope: Scope,

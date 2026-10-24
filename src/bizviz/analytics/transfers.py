@@ -8,6 +8,14 @@ CC_PAYMENT = "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"
 INV_PREFIX = "inv:"
 MAX_DAY_GAP = 5
 
+# Investment transactions that move cash into or out of the account (deposits, withdrawals,
+# contributions, cash transfers). Expects `investment_transactions it` LEFT JOIN `securities s`.
+INV_CASH_MOVEMENT_SQL = (
+    "it.amount IS NOT NULL AND ((it.type = 'cash' AND it.subtype IN"
+    " ('deposit', 'withdrawal', 'contribution', 'transfer')) OR (it.type = 'transfer'"
+    " AND (it.security_id IS NULL OR s.is_cash_equivalent = 1)))"
+)
+
 
 class Side(NamedTuple):
     id: str
@@ -27,13 +35,19 @@ def _kind(counterpart_id: str) -> str:
     return "investment" if counterpart_id.startswith(INV_PREFIX) else "cash"
 
 
+def _pairable_inflow(side: Side) -> bool:
+    # Paychecks never pair, but a credit card never receives one: Plaid sometimes labels the
+    # payment arriving on a card as income, and that must still pair with its card payment.
+    return side.amount < 0 and (side.pfc_primary != "INCOME" or side.account_type == "credit")
+
+
 def match_transfers(sides: Iterable[Side]) -> dict[str, tuple[str, str]]:
     """Greedily pair outflows with inflows; returns side id -> (counterpart id, kind)."""
     prepared = [(s, date.fromisoformat(s.date).toordinal(), _is_transfer_typed(s)) for s in sides]
     inflows: dict[float, list[tuple[Side, int, bool]]] = defaultdict(list)
     for item in prepared:
         side = item[0]
-        if side.amount < 0 and side.pfc_primary != "INCOME":
+        if _pairable_inflow(side):
             inflows[round(-side.amount, 2)].append(item)
 
     candidates: list[tuple[int, int, str, str]] = []
