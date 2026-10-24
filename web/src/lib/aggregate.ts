@@ -232,6 +232,30 @@ export function monthlyEarnings(
   return compute(payload, scope, 'earning', split, today).result;
 }
 
+export interface SavingsResult {
+  months: string[];
+  inProgress: string;
+  earnings: number[];
+  spending: number[];
+  /** Earnings minus spending; negative when spending was higher. */
+  savings: number[];
+  /** Pending earnings minus pending spending. */
+  pendingByMonth: number[];
+}
+
+export function monthlySavings(payload: DataPayload, scope: Scope, today: Today): SavingsResult {
+  const earning = compute(payload, scope, 'earning', 'none', today).result;
+  const spending = compute(payload, scope, 'spending', 'none', today).result;
+  return {
+    months: earning.months,
+    inProgress: earning.inProgress,
+    earnings: earning.totals,
+    spending: spending.totals,
+    savings: earning.totals.map((e, i) => round2(e - spending.totals[i])),
+    pendingByMonth: earning.pendingByMonth.map((e, i) => round2(e - spending.pendingByMonth[i])),
+  };
+}
+
 export function seriesTransactions(
   payload: DataPayload,
   scope: Scope,

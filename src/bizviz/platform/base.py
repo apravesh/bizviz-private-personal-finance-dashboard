@@ -3,6 +3,10 @@ from pathlib import Path
 from typing import Protocol
 
 
+class PlatformError(RuntimeError):
+    """A macOS tool (launchctl, security) failed; the message is safe to show the user."""
+
+
 class SecretStore(Protocol):
     def get(self, name: str) -> str | None: ...
 

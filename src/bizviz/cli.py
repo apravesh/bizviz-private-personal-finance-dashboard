@@ -44,7 +44,7 @@ from bizviz.context import AppContext
 from bizviz.db.connection import WrongKeyError, get_setting, set_setting, write_unit
 from bizviz.db.migrate import migrate
 from bizviz.platform import UnsupportedPlatformError, get_platform
-from bizviz.platform.base import Platform
+from bizviz.platform.base import Platform, PlatformError
 from bizviz.service import Runtime, build_runtime
 
 EXIT_ABORTED = 1
@@ -724,6 +724,9 @@ def main(
     except _Abort as abort:
         print(abort.message, file=sys.stderr)
         return abort.code
+    except PlatformError as exc:
+        print(exc, file=sys.stderr)
+        return EXIT_ABORTED
     except SystemExit as exit_:
         if isinstance(exit_.code, str):
             print(exit_.code, file=sys.stderr)

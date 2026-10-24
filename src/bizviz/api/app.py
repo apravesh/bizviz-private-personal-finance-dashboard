@@ -149,8 +149,8 @@ def create_app(runtime: Runtime) -> FastAPI:
             html.replace(NONCE_PLACEHOLDER, nonce), headers={"Cache-Control": "no-cache"}
         )
 
-    app.add_api_route("/", index, methods=["GET"], include_in_schema=False)
-    app.add_api_route("/index.html", index, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/", index, methods=["GET", "HEAD"], include_in_schema=False)
+    app.add_api_route("/index.html", index, methods=["GET", "HEAD"], include_in_schema=False)
     if web_dist.is_dir():
         app.mount("/", StaticFiles(directory=web_dist), name="static")
 

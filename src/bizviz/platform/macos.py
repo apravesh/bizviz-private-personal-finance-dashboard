@@ -1,14 +1,19 @@
 import os
 import plistlib
 import subprocess
+import time
 from pathlib import Path
 
 import keyring
 from keyring.errors import PasswordDeleteError
 
 from bizviz.config import LAUNCH_AGENT_LABEL
+from bizviz.platform.base import PlatformError
 
 _TIMEOUT = 30
+_UNLOAD_TIMEOUT = 45.0
+_POLL_INTERVAL = 0.5
+_BOOTSTRAP_ATTEMPTS = 5
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess[str] | None:
@@ -75,11 +80,29 @@ class LaunchdServiceManager:
         result = _run(["launchctl", "print", self._target])
         return result is not None and result.returncode == 0 and "state = running" in result.stdout
 
+    def _is_loaded(self) -> bool:
+        result = _run(["launchctl", "print", self._target])
+        return result is not None and result.returncode == 0
+
     def stop(self) -> None:
+        # bootout returns while the old process is still shutting down (the server waits for the
+        # scheduler thread); a bootstrap before it is fully gone fails with "5: Input/output error".
         _run(["launchctl", "bootout", self._target])
+        deadline = time.monotonic() + _UNLOAD_TIMEOUT
+        while self._is_loaded() and time.monotonic() < deadline:
+            time.sleep(_POLL_INTERVAL)
 
     def start(self) -> None:
-        _run(["launchctl", "bootstrap", self._domain, str(self.plist_path)])
+        detail = "command failed"
+        for attempt in range(_BOOTSTRAP_ATTEMPTS):
+            if attempt:
+                time.sleep(_POLL_INTERVAL)
+            result = _run(["launchctl", "bootstrap", self._domain, str(self.plist_path)])
+            if result is not None and result.returncode == 0:
+                return
+            if result is not None:
+                detail = result.stderr.strip() or f"exit code {result.returncode}"
+        raise PlatformError(f"Could not start the background service: {detail}")
 
 
 class MacSystemStatus:
@@ -117,7 +140,7 @@ class MacTrustStore:
         )
         if result is None or result.returncode != 0:
             detail = result.stderr.strip() if result else "command failed"
-            raise RuntimeError(f"Could not trust the CA certificate: {detail}")
+            raise PlatformError(f"Could not trust the CA certificate: {detail}")
 
     def untrust_ca(self, pem_path: Path) -> None:
         _run(["security", "remove-trusted-cert", str(pem_path)])

@@ -85,9 +85,44 @@ def test_trust_commands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     assert calls[1] == ["security", "remove-trusted-cert", "/ca.pem"]
 
 
+def _patch_launchctl(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    loaded_polls: int = 0,
+    bootstrap_codes: tuple[int, ...] = (0,),
+) -> list[list[str]]:
+    """Fake launchctl: `print` reports loaded for `loaded_polls` calls after each bootout,
+    and successive bootstraps exit with `bootstrap_codes` (the last one repeats)."""
+    calls: list[list[str]] = []
+    state = {"loaded": 0, "bootstraps": 0}
+
+    def fake(args: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        verb = args[1]
+        if verb == "bootout":
+            state["loaded"] = loaded_polls
+            return _result()
+        if verb == "print":
+            if state["loaded"] > 0:
+                state["loaded"] -= 1
+                return _result("\tstate = SIGTERMed\n")
+            return _result(returncode=113)
+        if verb == "bootstrap":
+            i = min(state["bootstraps"], len(bootstrap_codes) - 1)
+            state["bootstraps"] += 1
+            code = bootstrap_codes[i]
+            stderr = "Bootstrap failed: 5" if code else ""
+            return subprocess.CompletedProcess(args, code, "", stderr)
+        return _result()
+
+    monkeypatch.setattr(macos, "_run", fake)
+    monkeypatch.setattr(macos.time, "sleep", lambda _: None)
+    return calls
+
+
 def test_launchd_install_and_uninstall(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    calls = _patch_run(monkeypatch, _result())
+    calls = _patch_launchctl(monkeypatch)
     svc = macos.LaunchdServiceManager()
     svc.install(Path("/repo/.venv/bin/python"), Path("/repo"), Path("/logs"))
     plist = tmp_path / "Library" / "LaunchAgents" / "com.bizviz.agent.plist"
@@ -98,10 +133,28 @@ def test_launchd_install_and_uninstall(monkeypatch: pytest.MonkeyPatch, tmp_path
     assert data["RunAtLoad"] is True and data["KeepAlive"] is True
     assert data["StandardOutPath"] == "/logs/launchd.out.log"
     assert data["StandardErrorPath"] == "/logs/launchd.err.log"
-    assert [c[1] for c in calls] == ["bootout", "bootstrap"]
-    assert calls[1][3] == str(plist)
+    assert [c[1] for c in calls] == ["bootout", "print", "bootstrap"]
+    assert calls[2][3] == str(plist)
     svc.uninstall()
     assert not plist.exists()
+
+
+def test_launchd_stop_waits_until_unloaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _patch_launchctl(monkeypatch, loaded_polls=3)
+    macos.LaunchdServiceManager().stop()
+    assert [c[1] for c in calls] == ["bootout", "print", "print", "print", "print"]
+
+
+def test_launchd_start_retries_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _patch_launchctl(monkeypatch, bootstrap_codes=(5, 5, 0))
+    macos.LaunchdServiceManager().start()
+    assert [c[1] for c in calls] == ["bootstrap"] * 3
+
+
+def test_launchd_start_failure_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_launchctl(monkeypatch, bootstrap_codes=(5,))
+    with pytest.raises(macos.PlatformError, match="Bootstrap failed: 5"):
+        macos.LaunchdServiceManager().start()
 
 
 def test_launchd_is_running(monkeypatch: pytest.MonkeyPatch) -> None:
