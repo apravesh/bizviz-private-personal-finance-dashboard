@@ -155,6 +155,23 @@ def test_investments_section(db: Connection, world: World) -> None:
     ]
 
 
+def test_investment_flows_are_net_money_in_per_day(db: Connection, world: World) -> None:
+    f.make_security(db, "sec-abc", "ABC")
+    f.make_security(db, "sec-mm", "MMF", type="cash", is_cash_equivalent=True)
+    txn = f.make_inv_txn
+    txn(db, "d1", "brk", None, "2026-03-01", "cash", "deposit", None, -500)
+    txn(db, "d2", "brk", None, "2026-03-01", "cash", "contribution", None, -100)
+    txn(db, "w1", "brk", None, "2026-04-01", "cash", "withdrawal", None, 200)
+    txn(db, "t1", "brk", "sec-mm", "2026-05-01", "transfer", "transfer", None, -50)
+    # Not money moving between accounts: gains, trades, fees and in-kind share transfers.
+    txn(db, "div", "brk", None, "2026-03-02", "cash", "dividend", None, -7)
+    txn(db, "buy", "brk", "sec-abc", "2026-03-03", "buy", "buy", 1, 300)
+    txn(db, "fee", "brk", None, "2026-03-04", "fee", "account fee", None, 5)
+    txn(db, "kind", "brk", "sec-abc", "2026-03-05", "transfer", "transfer", 1, -300)
+    (inv,) = build_dataset(db, TODAY)["investments"]
+    assert inv["flows"] == [("2026-03-01", 600), ("2026-04-01", -200), ("2026-05-01", 50)]
+
+
 def test_investment_actual_without_holdings_uses_all_snapshots_up_to_cutoff(
     db: Connection, world: World
 ) -> None:

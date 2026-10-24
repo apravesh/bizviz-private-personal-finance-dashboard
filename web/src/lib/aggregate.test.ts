@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accountGains,
   accountLabel,
+  investmentGainsSeries,
   investmentSeries,
   money,
   moneyAxis,
@@ -243,6 +245,88 @@ describe('investmentSeries', () => {
     expect(r.estimated).toEqual([
       ['2026-08-15', 90],
       ['2026-09-15', 97.5],
+    ]);
+  });
+});
+
+describe('accountGains', () => {
+  it('takes deposits and withdrawals out of the value change', () => {
+    const gains = accountGains(
+      [
+        ['2026-01-03', 1600],
+        ['2026-01-04', 1450],
+      ],
+      [
+        ['2026-01-01', 1000],
+        ['2026-01-02', 1010],
+      ],
+      [
+        ['2026-01-03', 500],
+        ['2026-01-04', -200],
+      ],
+    );
+    expect(gains.estimated).toEqual([
+      ['2026-01-01', 0],
+      ['2026-01-02', 10],
+    ]);
+    // 1600 - 1000 - 500 deposited; 1450 - 1000 - (500 - 200)
+    expect(gains.actual).toEqual([
+      ['2026-01-03', 100],
+      ['2026-01-04', 150],
+    ]);
+  });
+
+  it('ignores flows on or before the first point, which its value already includes', () => {
+    const gains = accountGains(
+      [
+        ['2026-01-01', 1000],
+        ['2026-01-02', 1000],
+      ],
+      [],
+      [
+        ['2025-12-01', 999],
+        ['2026-01-01', 1000],
+      ],
+    );
+    expect(gains.actual).toEqual([
+      ['2026-01-01', 0],
+      ['2026-01-02', 0],
+    ]);
+  });
+
+  it('prefers the reported value over the estimate on the same date', () => {
+    const gains = accountGains([['2026-01-02', 120]], [['2026-01-01', 100], ['2026-01-02', 999]], []);
+    expect(gains.estimated).toEqual([['2026-01-01', 0]]);
+    expect(gains.actual).toEqual([['2026-01-02', 20]]);
+  });
+
+  it('is empty without values', () => {
+    expect(accountGains([], [], [['2026-01-01', 5]])).toEqual({ actual: [], estimated: [] });
+  });
+});
+
+describe('investmentGainsSeries', () => {
+  it('follows scope and uses the fixture flows', () => {
+    const mine = investmentGainsSeries(makePayload(), 'mine', 'daily');
+    expect(mine.map((a) => a.account_id)).toEqual(['acc-brokerage']);
+    // base 90 on 2026-08-30; 5 deposited on 2026-10-01
+    expect(mine[0].estimated).toEqual([
+      ['2026-08-30', 0],
+      ['2026-09-01', 5],
+    ]);
+    expect(mine[0].actual).toEqual([
+      ['2026-09-30', 10],
+      ['2026-10-01', 15],
+      ['2026-10-02', 25],
+    ]);
+    expect(investmentGainsSeries(makePayload(), 'household', 'daily')).toHaveLength(2);
+  });
+
+  it('averages per month', () => {
+    const [account] = investmentGainsSeries(makePayload(), 'mine', 'monthly');
+    expect(account.actual).toEqual([
+      ['2026-09-15', 10],
+      ['2026-10-15', 20],
     ]);
   });
 });

@@ -10,18 +10,28 @@ from bizviz.analytics.categories import (
 )
 from bizviz.analytics.merchant import merchant_key, raw_display
 from bizviz.analytics.recurring import RecRow, detect
-from bizviz.analytics.transfers import CC_PAYMENT, INV_PREFIX, Side, match_transfers
+from bizviz.analytics.transfers import (
+    CC_PAYMENT,
+    INV_CASH_MOVEMENT_SQL,
+    INV_PREFIX,
+    Side,
+    match_transfers,
+)
 from bizviz.api.schema import QualityOut, SupersededOut, SuspectCardPayments
 from bizviz.db.connection import Connection, bump_data_version, write_unit
 
 SCOPES = ("mine", "household")
 CASH_TYPES = ("depository", "credit")
+# Plaid's labels for money moving between the user's own accounts. Unpaired ones (the other
+# account is not linked) are still transfers, not spending or earnings.
 _E_DETAILED = frozenset(
     {
         "TRANSFER_OUT_SAVINGS",
         "TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS",
+        "TRANSFER_OUT_ACCOUNT_TRANSFER",
         "TRANSFER_IN_SAVINGS",
         "TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS",
+        "TRANSFER_IN_ACCOUNT_TRANSFER",
     }
 )
 
@@ -50,13 +60,11 @@ def _fits(applies_to: str, flow: str) -> bool:
     return applies_to == "both" or applies_to == flow
 
 
-def _auto(
-    tx: _Tx, outflow: bool, paired: bool, counterpart_in_scope: bool, default_cat: str
-) -> tuple[str, str]:
+def _auto(tx: _Tx, outflow: bool, paired: bool, default_cat: str) -> tuple[str, str]:
+    # A transfer to or from any linked account, including a joint one seen from Mine, is money
+    # moving between the household's own accounts.
     if paired:
-        if counterpart_in_scope:
-            return "internal", TRANSFER
-        return ("spending", "sys:to_joint") if outflow else ("earning", "sys:from_joint")
+        return "internal", TRANSFER
     primary, detailed = tx.pfc_primary, tx.pfc_detailed
     if outflow:
         if detailed == CC_PAYMENT:
@@ -169,18 +177,14 @@ def rebuild_classification(conn: Connection, today: date) -> int:
             )
             for tx in txs
         ]
-        side_account = {tx.id: tx.account_id for tx in txs}
         for r in conn.execute(
             "SELECT it.investment_transaction_id, it.account_id, it.date, it.amount"
             " FROM investment_transactions it JOIN accounts a ON a.account_id = it.account_id"
             " LEFT JOIN securities s ON s.security_id = it.security_id"
             " WHERE a.type = 'investment' AND a.included = 1 AND a.duplicate_of_account IS NULL"
-            " AND it.amount IS NOT NULL AND ((it.type = 'cash' AND it.subtype IN"
-            " ('deposit', 'withdrawal', 'contribution', 'transfer')) OR (it.type = 'transfer'"
-            " AND (it.security_id IS NULL OR s.is_cash_equivalent = 1)))"
+            f" AND {INV_CASH_MOVEMENT_SQL}"
         ):
             side_id = INV_PREFIX + r[0]
-            side_account[side_id] = r[1]
             sides.append(Side(side_id, r[1], "investment", r[2], r[3], None, None))
         pairs = match_transfers(sides)
 
@@ -206,9 +210,6 @@ def rebuild_classification(conn: Connection, today: date) -> int:
             outflow = tx.amount >= 0
             default_cat = default_category(tx.pfc_primary, tx.pfc_detailed, applies)
             pair = pairs.get(tx.id)
-            counterpart_owner = (
-                accounts[side_account[pair[0]]]["ownership"] if pair is not None else None
-            )
             ov = overrides.get(tx.id)
             override = (ov["flow_class"], ov["category_id"]) if ov else no_rule
             rule_row = rules.get(tx.key)
@@ -217,8 +218,7 @@ def rebuild_classification(conn: Connection, today: date) -> int:
             for scope in SCOPES:
                 if not _in_scope(scope, owner):
                     continue
-                cp_in_scope = counterpart_owner is not None and _in_scope(scope, counterpart_owner)
-                auto = _auto(tx, outflow, pair is not None, cp_in_scope, default_cat)
+                auto = _auto(tx, outflow, pair is not None, default_cat)
                 result = _layered(outflow, auto, override, rule, applies)
                 classes[scope][tx.id] = result
                 if result[0] == "spending" and tx.amount > 0:

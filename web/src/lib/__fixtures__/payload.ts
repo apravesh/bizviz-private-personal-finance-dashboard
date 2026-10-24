@@ -196,6 +196,7 @@ export function makePayload(): DataPayload {
             price_as_of: '2026-10-02',
           },
         ],
+        flows: [['2026-10-01', 5]],
       },
       {
         account_id: 'acc-joint-ira',
@@ -204,6 +205,7 @@ export function makePayload(): DataPayload {
         estimated: [],
         estimate_meta: null,
         holdings: [],
+        flows: [],
       },
     ],
     net_worth: {

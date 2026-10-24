@@ -118,6 +118,8 @@ export interface InvestmentOut {
   estimated: [string, number][];
   estimate_meta: EstimateMetaOut | null;
   holdings: HoldingOut[];
+  /** Net money moved into (+) or out of (-) the account per day: deposits, withdrawals, cash transfers. */
+  flows: [string, number][];
 }
 
 export interface NetWorthScope {

@@ -44,6 +44,27 @@ def test_never_pairs_income_side() -> None:
     assert out == {}
 
 
+def test_card_payment_pairs_with_card_credit_labelled_income() -> None:
+    # Plaid sometimes labels the payment arriving on a card as salary; it is still the payment.
+    out = match_transfers(
+        [
+            side("o", "chk", "2026-01-01", 500, "LOAN_PAYMENTS", CC_PAYMENT),
+            side("i", "card", "2026-01-03", -500, "INCOME", "INCOME_SALARY", type="credit"),
+        ]
+    )
+    assert out == {"o": ("i", "cash"), "i": ("o", "cash")}
+
+
+def test_income_on_card_without_a_payment_stays_unpaired() -> None:
+    out = match_transfers(
+        [
+            side("o", "chk", "2026-01-01", 500, "FOOD_AND_DRINK"),
+            side("i", "card", "2026-01-01", -500, "INCOME", "INCOME_SALARY", type="credit"),
+        ]
+    )
+    assert out == {}
+
+
 def test_requires_transfer_typed_side_amount_accounts_and_window() -> None:
     base = [side("o", "a", "2026-01-01", 100, "FOOD_AND_DRINK")]
     assert match_transfers([*base, side("i", "b", "2026-01-01", -100, "GENERAL_MERCHANDISE")]) == {}

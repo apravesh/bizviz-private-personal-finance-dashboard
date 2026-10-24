@@ -80,7 +80,7 @@ Linking happens only from the Mac's browser at `https://localhost:8443`. Log in,
 - **Link brokerage or retirement account**
 - **Link loan or mortgage**
 
-After linking, mark each new account **Mine** or **Joint** (default Mine) and confirm it. The **Mine / Household** toggle at the top of the dashboard chooses what you see: Mine shows only accounts marked Mine, so a joint account does not appear in your own spending. Household shows all included accounts, so money moving between your own and a joint account is not counted as leaving your household.
+After linking, mark each new account **Mine** or **Joint** (default Mine) and confirm it. The **Mine / Household** toggle at the top of the dashboard chooses what you see: Mine shows only accounts marked Mine, so a joint account does not appear in your own spending. Household shows all included accounts. Either way, money moving between your own and a joint account is a transfer, not spending or earning.
 
 BizViz downloads up to 24 months of transactions when you link; the 5-year charts fill in over time.
 
@@ -94,12 +94,13 @@ BizViz is reachable on home Wi-Fi only. If you want the phone app away from home
 
 ## How the numbers work
 
-- Transfers between your own accounts are excluded, so moving money is not counted as earning or spending.
+- Transfers between your own accounts are excluded, so moving money is not counted as earning or spending. That includes moves to and from a joint account, and transfers Plaid labels as between accounts even when the other account is not linked. Payments through apps such as Zelle or Venmo still count, since they usually go to or come from other people; mark any of them as Transfer in **Transactions** if they are your own.
 - Credit card payments are not double counted: the purchases count when made, the payment to the card does not.
 - Loan and mortgage payments count as spending.
 - Refunds reduce spending.
 - Pending charges are included and marked as pending.
 - The current month is labelled "in progress".
+- The dashboard has two tabs: **Earnings & spending** (savings, earnings, spending and recurring charges) and **Investments** (investment accounts and net worth). On Investments, **Gains (excl. deposits)** shows each account's change in value with deposits and withdrawals taken out, so moving money in or out does not look like growth or loss.
 - **Investment history before you linked is estimated** (dashed lines), rebuilt from your current holdings, your investment transactions and free Yahoo Finance prices. It can exclude holdings that have no public prices, and says how many. From the day you link, actual balances are recorded and shown as solid lines.
 - Net worth history starts when you link. It is never estimated.
 - Your corrections (category, Earning/Spending/Transfer/Ignore, recurring) always win. Sync never overwrites them.

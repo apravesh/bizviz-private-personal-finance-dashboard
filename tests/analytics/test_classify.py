@@ -69,12 +69,12 @@ RULE_CASES: list[tuple[str, Setup, tuple[str, str], tuple[str, str]]] = [
         ("internal", "sys:transfer"),
         ("internal", "sys:transfer"),
     ),
-    ("B-out", _rule_b_out, ("spending", "sys:to_joint"), ("internal", "sys:transfer")),
-    ("B-in", _rule_b_in, ("earning", "sys:from_joint"), ("internal", "sys:transfer")),
+    ("B-out", _rule_b_out, ("internal", "sys:transfer"), ("internal", "sys:transfer")),
+    ("B-in", _rule_b_in, ("internal", "sys:transfer"), ("internal", "sys:transfer")),
     (
         "B-investment",
         _rule_b_investment_joint,
-        ("spending", "sys:to_joint"),
+        ("internal", "sys:transfer"),
         ("internal", "sys:transfer"),
     ),
     (
@@ -126,8 +126,14 @@ RULE_CASES: list[tuple[str, Setup, tuple[str, str], tuple[str, str]]] = [
         ("earning", "plaid:INCOME_OTHER"),
     ),
     (
-        "H",
+        "E-account-transfer-in",
         _simple(-100, "TRANSFER_IN", "TRANSFER_IN_ACCOUNT_TRANSFER"),
+        ("internal", "sys:transfer"),
+        ("internal", "sys:transfer"),
+    ),
+    (
+        "H",
+        _simple(-100, "TRANSFER_IN", "TRANSFER_IN_TRANSFER_IN_FROM_APPS"),
         ("earning", "sys:money_in_others"),
         ("earning", "sys:money_in_others"),
     ),
@@ -144,8 +150,14 @@ RULE_CASES: list[tuple[str, Setup, tuple[str, str], tuple[str, str]]] = [
         ("spending", "sys:uncategorized"),
     ),
     (
-        "J",
+        "E-account-transfer-out",
         _simple(100, "TRANSFER_OUT", "TRANSFER_OUT_ACCOUNT_TRANSFER"),
+        ("internal", "sys:transfer"),
+        ("internal", "sys:transfer"),
+    ),
+    (
+        "J",
+        _simple(100, "TRANSFER_OUT", "TRANSFER_OUT_TRANSFER_OUT_FROM_APPS"),
         ("spending", "sys:transfers_out"),
         ("spending", "sys:transfers_out"),
     ),
@@ -192,14 +204,14 @@ def test_rule_b_joint_transactions_have_no_mine_scope(db: Connection, world: Wor
     assert c["mine_recurring"] is None and c["mine_category_id"] is None
 
 
-def test_rule_b_inflow_in_mine_only_when_inflow_account_is_mine(
+def test_joint_transfer_inflow_in_mine_only_when_inflow_account_is_mine(
     db: Connection, world: World
 ) -> None:
     _rule_b_out(world)
     _rule_b_in_other = world.tx("o2", world.joint, "2026-03-01", 80, "TRANSFER_OUT")
     world.tx("i2", world.chk, "2026-03-01", -80, "TRANSFER_IN")
     rebuild_classification(db, TODAY)
-    assert scoped(db, "i2", "mine") == ("earning", "sys:from_joint")
+    assert scoped(db, "i2", "mine") == ("internal", "sys:transfer")
     assert scoped(db, _rule_b_in_other, "mine") is None
 
 
@@ -521,3 +533,14 @@ def test_lost_update_protection(
     editor.join(10)
     assert not errors
     assert scoped(db, "t", "mine") == ("spending", "plaid:TRAVEL")
+
+
+def test_card_payment_and_card_credit_labelled_salary_are_one_transfer(
+    db: Connection, world: World
+) -> None:
+    world.tx("pay", world.chk, "2026-02-01", 750, "LOAN_PAYMENTS", CC)
+    world.tx("got", world.cc, "2026-02-03", -750, "INCOME", "INCOME_SALARY")
+    rebuild_classification(db, TODAY)
+    for scope in ("mine", "household"):
+        assert scoped(db, "pay", scope) == ("internal", "sys:transfer")
+        assert scoped(db, "got", scope) == ("internal", "sys:transfer")

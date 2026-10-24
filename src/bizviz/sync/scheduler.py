@@ -93,6 +93,15 @@ class Scheduler:
         self._thread = None
 
     def _loop(self) -> None:
+        # Classification is a pure function of the database, so rebuild once at start: an update
+        # that changes the counting rules then applies to existing data without waiting for a sync.
+        now = self._now()
+        self._step(
+            "startup classify",
+            lambda _now, today: self._rebuild_classification(today),
+            now,
+            now.astimezone(self.ctx.tz()).date(),
+        )
         while not self._stop.is_set():
             self._wake.wait(self._tick_seconds)
             self._wake.clear()

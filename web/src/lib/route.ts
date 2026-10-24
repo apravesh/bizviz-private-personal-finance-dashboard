@@ -1,6 +1,6 @@
 import { readable } from 'svelte/store';
 
-export type RouteName = 'dashboard' | 'transactions' | 'settings';
+export type RouteName = 'dashboard' | 'investments' | 'transactions' | 'settings';
 
 export interface Route {
   name: RouteName;
@@ -9,7 +9,14 @@ export interface Route {
 
 export function parseHash(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#/, '').split('?');
-  const name: RouteName = path === '/transactions' ? 'transactions' : path === '/settings' ? 'settings' : 'dashboard';
+  const name: RouteName =
+    path === '/investments'
+      ? 'investments'
+      : path === '/transactions'
+        ? 'transactions'
+        : path === '/settings'
+          ? 'settings'
+          : 'dashboard';
   return { name, params: new URLSearchParams(query) };
 }
 

@@ -4,6 +4,7 @@ from typing import Any
 
 from bizviz.analytics.classify import compute_quality
 from bizviz.analytics.networth import compute_net_worth, eligible_accounts
+from bizviz.analytics.transfers import INV_CASH_MOVEMENT_SQL
 from bizviz.api.schema import (
     AccountOut,
     CategoryOut,
@@ -246,6 +247,17 @@ def _investments(conn: Connection) -> list[InvestmentOut]:
                 (aid, aid),
             )
         ]
+        # Net money moved in (+) or out (-) per day; Plaid reports cash credited as negative.
+        flows = [
+            (r[0], round(-r[1], 2))
+            for r in conn.execute(
+                "SELECT it.date, SUM(it.amount) FROM investment_transactions it"
+                " LEFT JOIN securities s ON s.security_id = it.security_id"
+                f" WHERE it.account_id = ? AND {INV_CASH_MOVEMENT_SQL}"
+                " GROUP BY it.date ORDER BY it.date",
+                (aid,),
+            )
+        ]
         out.append(
             {
                 "account_id": aid,
@@ -254,6 +266,7 @@ def _investments(conn: Connection) -> list[InvestmentOut]:
                 "estimated": estimated,
                 "estimate_meta": estimate_meta,
                 "holdings": holdings,
+                "flows": flows,
             }
         )
     return out
