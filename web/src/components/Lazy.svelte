@@ -2,15 +2,20 @@
   import { onMount, type Component } from 'svelte';
   import type { DataPayload } from '../lib/types';
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type Loadable = Component<{ payload: DataPayload } & Record<string, any>>;
+
   interface Props {
-    load: () => Promise<{ default: Component<{ payload: DataPayload }> }>;
+    load: () => Promise<{ default: Loadable }>;
     payload: DataPayload;
     minHeight?: number;
+    /** Extra props for the loaded component. */
+    props?: Record<string, unknown>;
   }
 
-  let { load, payload, minHeight = 200 }: Props = $props();
+  let { load, payload, minHeight = 200, props = {} }: Props = $props();
 
-  let Loaded = $state.raw<Component<{ payload: DataPayload }> | null>(null);
+  let Loaded = $state.raw<Loadable | null>(null);
   let placeholder: HTMLDivElement | undefined = $state();
 
   onMount(() => {
@@ -39,7 +44,7 @@
 </script>
 
 {#if Loaded}
-  <Loaded {payload} />
+  <Loaded {payload} {...props} />
 {:else}
   <div bind:this={placeholder} style:min-height="{minHeight}px" class="card muted">Loading…</div>
 {/if}

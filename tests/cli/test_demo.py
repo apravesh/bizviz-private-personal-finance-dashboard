@@ -79,7 +79,7 @@ def test_demo_accounts_cover_every_type(data: dict[str, Any]) -> None:
 def test_demo_investment_actual_and_estimated_with_split_and_excluded_fund(
     data: dict[str, Any],
 ) -> None:
-    (inv,) = data["investments"]
+    inv = next(i for i in data["investments"] if i["account_id"] == "demo-brokerage")
     assert inv["actual"] and inv["actual"][-1][1] > 100_000
     estimated = inv["estimated"]
     assert len(estimated) > 365
@@ -89,6 +89,21 @@ def test_demo_investment_actual_and_estimated_with_split_and_excluded_fund(
     values = [v for _, v in estimated]
     jumps = [abs(b / a - 1) for a, b in zip(values, values[1:], strict=False)]
     assert max(jumps) < 0.2, "a 2:1 split must not show up as a jump in the estimate"
+
+
+def test_demo_has_tax_advantaged_accounts_with_contributions(data: dict[str, Any]) -> None:
+    subtypes = {a["account_id"]: a["subtype"] for a in data["accounts"]}
+    assert subtypes["demo-401k"] == "401k" and subtypes["demo-roth-ira"] == "roth"
+    by_id = {i["account_id"]: i for i in data["investments"]}
+    for account_id in ("demo-401k", "demo-roth-ira"):
+        inv = by_id[account_id]
+        assert inv["actual"] and inv["estimate_meta"]["status"] == "ok"
+        assert len(inv["estimated"]) > 365
+        assert len(inv["flows"]) >= 24 and all(amount > 0 for _, amount in inv["flows"])
+        # The estimate ends where reported values start.
+        last_estimate = inv["estimated"][-1][1]
+        first_actual = dict(inv["actual"]).get(inv["estimated"][-1][0])
+        assert first_actual is None or abs(last_estimate / first_actual - 1) < 0.01
 
 
 def test_synthetic_prices_are_split_adjusted() -> None:

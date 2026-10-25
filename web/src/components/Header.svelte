@@ -35,6 +35,7 @@
   const links = [
     { href: '#/', name: 'dashboard', label: 'Earnings & spending' },
     { href: '#/investments', name: 'investments', label: 'Investments' },
+    { href: '#/retirement', name: 'retirement', label: 'Retirement' },
     { href: '#/transactions', name: 'transactions', label: 'Transactions' },
     { href: '#/settings', name: 'settings', label: 'Settings' },
   ] as const;

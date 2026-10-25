@@ -9,6 +9,7 @@
   import Header from './components/Header.svelte';
   import Investments from './components/Investments.svelte';
   import Login from './components/Login.svelte';
+  import Retirement from './components/Retirement.svelte';
   import Settings from './components/Settings.svelte';
   import TransactionEditorHost from './components/TransactionEditorHost.svelte';
   import Transactions from './components/Transactions.svelte';
@@ -34,6 +35,8 @@
       </p>
     {:else if $route.name === 'investments'}
       <Investments />
+    {:else if $route.name === 'retirement'}
+      <Retirement />
     {:else if $route.name === 'transactions'}
       <Transactions />
     {:else if $route.name === 'settings'}

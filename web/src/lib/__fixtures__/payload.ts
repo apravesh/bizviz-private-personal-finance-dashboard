@@ -2,7 +2,7 @@ import type { AccountOut, DataPayload, ScopeClass, TransactionOut } from '../typ
 
 export const TODAY = '2026-10-19';
 
-function account(over: Partial<AccountOut> & { account_id: string }): AccountOut {
+export function account(over: Partial<AccountOut> & { account_id: string }): AccountOut {
   return {
     item_id: 'item-1',
     institution_name: 'First Bank',

@@ -100,7 +100,7 @@ BizViz is reachable on home Wi-Fi only. If you want the phone app away from home
 - Refunds reduce spending.
 - Pending charges are included and marked as pending.
 - The current month is labelled "in progress".
-- The dashboard has two tabs: **Earnings & spending** (savings, earnings, spending and recurring charges) and **Investments** (investment accounts and net worth). On Investments, **Gains (excl. deposits)** shows each account's change in value with deposits and withdrawals taken out, so moving money in or out does not look like growth or loss.
+- The dashboard has three tabs: **Earnings & spending** (savings, earnings, spending and recurring charges), **Investments** (taxable investment accounts and net worth) and **Retirement** (401(k), 403(b), IRA, Roth, HSA, 529 and other tax-advantaged accounts, grouped by tax treatment as reported by the institution, with money moved in per year). On Investments, **Gains (excl. deposits)** shows each account's change in value with deposits and withdrawals taken out, so moving money in or out does not look like growth or loss.
 - **Investment history before you linked is estimated** (dashed lines), rebuilt from your current holdings, your investment transactions and free Yahoo Finance prices. It can exclude holdings that have no public prices, and says how many. From the day you link, actual balances are recorded and shown as solid lines.
 - Net worth history starts when you link. It is never estimated.
 - Your corrections (category, Earning/Spending/Transfer/Ignore, recurring) always win. Sync never overwrites them.

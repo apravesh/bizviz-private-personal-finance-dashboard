@@ -6,9 +6,11 @@ describe('parseHash', () => {
     expect(parseHash('').name).toBe('dashboard');
     expect(parseHash('#/').name).toBe('dashboard');
     expect(parseHash('#/investments').name).toBe('investments');
+    expect(parseHash('#/retirement').name).toBe('retirement');
     expect(parseHash('#/transactions?account=a').name).toBe('transactions');
     expect(parseHash('#/settings').name).toBe('settings');
     expect(parseHash('#/nope').name).toBe('dashboard');
+    expect(parseHash('#toString').name).toBe('dashboard');
   });
 
   it('keeps query parameters', () => {

@@ -1,22 +1,22 @@
 import { readable } from 'svelte/store';
 
-export type RouteName = 'dashboard' | 'investments' | 'transactions' | 'settings';
+export type RouteName = 'dashboard' | 'investments' | 'retirement' | 'transactions' | 'settings';
 
 export interface Route {
   name: RouteName;
   params: URLSearchParams;
 }
 
+const ROUTES: Record<string, RouteName> = {
+  '/investments': 'investments',
+  '/retirement': 'retirement',
+  '/transactions': 'transactions',
+  '/settings': 'settings',
+};
+
 export function parseHash(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#/, '').split('?');
-  const name: RouteName =
-    path === '/investments'
-      ? 'investments'
-      : path === '/transactions'
-        ? 'transactions'
-        : path === '/settings'
-          ? 'settings'
-          : 'dashboard';
+  const name = Object.hasOwn(ROUTES, path) ? ROUTES[path] : 'dashboard';
   return { name, params: new URLSearchParams(query) };
 }
 
