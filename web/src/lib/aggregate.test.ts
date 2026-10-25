@@ -16,6 +16,7 @@ import {
   scopeClass,
   seriesTransactions,
   sliceFilters,
+  stackAccountsByMonth,
   spendingByCategory,
 } from './aggregate';
 import { makePayload, TODAY, tx } from './__fixtures__/payload';
@@ -470,6 +471,48 @@ describe('investmentGainsSeries', () => {
       ['2026-09-15', 10],
       ['2026-10-15', 20],
     ]);
+  });
+});
+
+describe('stackAccountsByMonth', () => {
+  const series = (account_id: string, actual: [string, number][], estimated: [string, number][] = []) => ({
+    account_id,
+    label: account_id.toUpperCase(),
+    actual,
+    estimated,
+    meta: null,
+  });
+  const accounts = [
+    series('a', [['2026-09-15', 100], ['2026-10-15', 120]], [['2026-08-15', 80], ['2026-09-15', 999]]),
+    series('b', [['2026-10-15', 50]]),
+    series('c', [['2026-10-15', 7]], [['2026-09-15', 5]]),
+  ];
+
+  it('lines accounts up by month; reported values win; estimated months are flagged', () => {
+    const r = stackAccountsByMonth(accounts);
+    expect(r.months).toEqual(['2026-08', '2026-09', '2026-10']);
+    expect(r.series).toEqual([
+      { key: 'a', label: 'A', values: [80, 100, 120] },
+      { key: 'b', label: 'B', values: [null, null, 50] },
+      { key: 'c', label: 'C', values: [null, 5, 7] },
+    ]);
+    expect(r.totals).toEqual([80, 105, 177]);
+    expect(r.estimated).toEqual([true, true, false]);
+  });
+
+  it('sums accounts that share a group', () => {
+    const r = stackAccountsByMonth(accounts, (a) =>
+      a.account_id === 'c' ? { key: 'roth', label: 'Roth' } : { key: 'pre', label: 'Pre-tax' },
+    );
+    expect(r.series).toEqual([
+      { key: 'pre', label: 'Pre-tax', values: [80, 100, 170] },
+      { key: 'roth', label: 'Roth', values: [null, 5, 7] },
+    ]);
+    expect(r.totals).toEqual([80, 105, 177]);
+  });
+
+  it('is empty without accounts', () => {
+    expect(stackAccountsByMonth([])).toEqual({ months: [], series: [], totals: [], estimated: [] });
   });
 });
 

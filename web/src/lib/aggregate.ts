@@ -487,6 +487,57 @@ export function investmentGainsSeries(
     });
 }
 
+export interface StackedMonths {
+  /** YYYY-MM, oldest first. */
+  months: string[];
+  /** One stack layer per account or group; null where it had no value that month. */
+  series: { key: string; label: string; values: (number | null)[] }[];
+  totals: number[];
+  /** Months where some of the value is estimated rather than reported. */
+  estimated: boolean[];
+}
+
+/**
+ * Lines the accounts' monthly points (YYYY-MM-15, as from monthly granularity) up by month and
+ * sums them per group. A reported value wins over an estimate for the same account and month.
+ */
+export function stackAccountsByMonth(
+  accounts: InvestmentAccountSeries[],
+  groupOf: (account: InvestmentAccountSeries) => { key: string; label: string } = (a) => ({
+    key: a.account_id,
+    label: a.label,
+  }),
+): StackedMonths {
+  const groups = new Map<string, { label: string; byMonth: Map<string, number> }>();
+  const estimatedMonths = new Set<string>();
+  const months = new Set<string>();
+  for (const account of accounts) {
+    const points = new Map<string, { value: number; estimated: boolean }>();
+    for (const [d, v] of account.estimated) points.set(d.slice(0, 7), { value: v, estimated: true });
+    for (const [d, v] of account.actual) points.set(d.slice(0, 7), { value: v, estimated: false });
+    const { key, label } = groupOf(account);
+    const group = groups.get(key) ?? { label, byMonth: new Map<string, number>() };
+    for (const [month, point] of points) {
+      months.add(month);
+      group.byMonth.set(month, (group.byMonth.get(month) ?? 0) + point.value);
+      if (point.estimated) estimatedMonths.add(month);
+    }
+    groups.set(key, group);
+  }
+  const axis = [...months].sort();
+  const series = [...groups.entries()].map(([key, g]) => ({
+    key,
+    label: g.label,
+    values: axis.map((m) => (g.byMonth.has(m) ? round2(g.byMonth.get(m)!) : null)),
+  }));
+  return {
+    months: axis,
+    series,
+    totals: axis.map((_, i) => round2(series.reduce((sum, s) => sum + (s.values[i] ?? 0), 0))),
+    estimated: axis.map((m) => estimatedMonths.has(m)),
+  };
+}
+
 export function netWorthSeries(
   payload: DataPayload,
   scope: Scope,

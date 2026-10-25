@@ -2,13 +2,20 @@
   import { money } from '../lib/aggregate';
   import { formatDate } from '../lib/format';
   import { store } from '../lib/store';
-  import { taxSummary, withInvestments, yearlyMoneyIn } from '../lib/taxAdvantaged';
+  import { TAX_GROUP_LABELS, taxGroup, taxSummary, withInvestments, yearlyMoneyIn } from '../lib/taxAdvantaged';
   import Lazy from './Lazy.svelte';
 
   const payload = $derived($store.payload);
   const summary = $derived(payload ? taxSummary(payload, $store.scope) : null);
   const yearly = $derived(payload ? yearlyMoneyIn(payload, $store.scope) : []);
   const thisYear = String(new Date().getFullYear());
+  const accountsById = $derived(new Map((payload?.accounts ?? []).map((a) => [a.account_id, a])));
+
+  function groupOf(accountId: string): { key: string; label: string } {
+    const account = accountsById.get(accountId);
+    const group = account ? taxGroup(account) : null;
+    return group ? { key: group, label: TAX_GROUP_LABELS[group] } : { key: 'unknown', label: 'Unknown' };
+  }
 </script>
 
 {#if payload && summary}
@@ -63,6 +70,9 @@
         id: 'retirement-investments',
         title: 'Value over time',
         emptyText: 'No value history for these accounts yet.',
+        stacked: true,
+        groupOf,
+        groupLabel: 'tax treatment',
       }}
     />
 
