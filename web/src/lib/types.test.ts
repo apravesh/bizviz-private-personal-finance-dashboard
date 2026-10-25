@@ -7,8 +7,8 @@ describe('types', () => {
     const scope: Scope = 'mine';
     const point: NetWorthPoint = {
       date: '2026-10-15',
-      mine: { assets: 1, debts: 0, stale_accounts: 0 },
-      household: { assets: 2, debts: 0, stale_accounts: 0 },
+      mine: { assets: 1, debts: 0, stale_accounts: 0, retirement: 0 },
+      household: { assets: 2, debts: 0, stale_accounts: 0, retirement: 1 },
     };
     expect(point[scope].assets).toBe(1);
     expect(flow).toBe('spending');

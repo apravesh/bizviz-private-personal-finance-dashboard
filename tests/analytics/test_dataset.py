@@ -123,6 +123,7 @@ def test_accounts_rules_categories_status(db: Connection, world: World) -> None:
     accounts = {a["account_id"]: a for a in payload["accounts"]}
     assert accounts["chk"]["institution_name"] == "Bank One" and accounts["chk"]["removed"] is False
     assert accounts["ra"]["removed"] is True and accounts["chk"]["included"] is True
+    assert accounts["chk"]["tax_group"] is None and accounts["brk"]["tax_group"] is None
     assert payload["rules"] == [
         {
             "rule_id": 1,
@@ -161,6 +162,8 @@ def test_investments_section(db: Connection, world: World) -> None:
             "price": 500,
             "value": 1000,
             "price_as_of": None,
+            "security_type": "equity",
+            "is_cash_equivalent": False,
         }
     ]
 

@@ -195,9 +195,25 @@ describe('investmentOption', () => {
 describe('netWorthOption', () => {
   const { points } = netWorthSeries(makePayload(), 'mine', 'daily');
 
-  it('plots net worth over time', () => {
+  it('stacks retirement and other assets, puts debts below zero and draws net worth as a line', () => {
     const option = netWorthOption(points) as Opt;
-    expect(option.series[0].data[0]).toEqual(['2026-09-28', 500]);
+    const byId = Object.fromEntries(option.series.map((s: Opt) => [s.id, s]));
+    expect(Object.keys(byId)).toEqual(['retirement', 'otherAssets', 'debts', 'net']);
+    expect(byId.retirement.data[0]).toEqual(['2026-09-28', 200]);
+    expect(byId.otherAssets.data[0]).toEqual(['2026-09-28', 600]);
+    expect(byId.retirement.stack).toBe(byId.otherAssets.stack);
+    expect(byId.debts.data[0]).toEqual(['2026-09-28', -300]);
+    expect(byId.debts.stack).not.toBe(byId.retirement.stack);
+    expect(byId.net).toMatchObject({ type: 'line' });
+    expect(byId.net.data[0]).toEqual(['2026-09-28', 500]);
+  });
+
+  it('tooltip breaks net worth down', () => {
+    const html = netWorthTooltipHtml(points[0]);
+    expect(html).toContain('Net worth: $500.00');
+    expect(html).toContain('Retirement &amp; tax-advantaged: $200.00');
+    expect(html).toContain('Other assets: $600.00');
+    expect(html).toContain('Debts: $300.00');
   });
 
   it('tooltip mentions stale accounts only when there are some', () => {

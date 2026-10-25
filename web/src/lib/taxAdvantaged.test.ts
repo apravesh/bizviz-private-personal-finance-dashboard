@@ -3,20 +3,16 @@ import { account, makePayload } from './__fixtures__/payload';
 import { isTaxAdvantaged, taxGroup, taxSummary, withInvestments, yearlyMoneyIn } from './taxAdvantaged';
 
 describe('taxGroup', () => {
-  it('groups Plaid subtypes by tax treatment, ignoring case and spaces', () => {
-    expect(taxGroup({ subtype: '401k' })).toBe('pre-tax');
-    expect(taxGroup({ subtype: '403B' })).toBe('pre-tax');
-    expect(taxGroup({ subtype: ' IRA ' })).toBe('pre-tax');
-    expect(taxGroup({ subtype: 'roth' })).toBe('roth');
-    expect(taxGroup({ subtype: 'Roth 401k' })).toBe('roth');
-    expect(taxGroup({ subtype: 'hsa' })).toBe('health');
-    expect(taxGroup({ subtype: '529' })).toBe('education');
-    expect(taxGroup({ subtype: 'pension' })).toBe('other');
+  // Subtypes are mapped to groups on the Mac (bizviz.analytics.tax); the page reads the result.
+  it('reads the group the Mac assigned', () => {
+    expect(taxGroup({ tax_group: 'pre-tax' })).toBe('pre-tax');
+    expect(taxGroup({ tax_group: 'roth' })).toBe('roth');
+    expect(isTaxAdvantaged({ tax_group: 'health' })).toBe(true);
   });
 
-  it('leaves taxable and unknown accounts out', () => {
-    for (const subtype of ['brokerage', 'crypto exchange', 'stock plan', 'checking', 'toString', '', null]) {
-      expect(isTaxAdvantaged({ subtype })).toBe(false);
+  it('treats taxable and unknown groups as not tax-advantaged', () => {
+    for (const tax_group of [null, '', 'brokerage', 'toString']) {
+      expect(isTaxAdvantaged({ tax_group })).toBe(false);
     }
   });
 });
@@ -34,12 +30,12 @@ describe('taxSummary', () => {
   const payload = () => {
     const p = makePayload();
     p.accounts.push(
-      account({ account_id: 'k1', name: '401k A', type: 'investment', subtype: '401k', current_balance: 50000 }),
-      account({ account_id: 'k2', name: '401k B', type: 'investment', subtype: '401k', current_balance: null }),
-      account({ account_id: 'r1', name: 'Roth', type: 'investment', subtype: 'roth', current_balance: 12000.5 }),
-      account({ account_id: 'h1', name: 'HSA', type: 'depository', subtype: 'hsa', current_balance: 3000 }),
-      account({ account_id: 'gone', type: 'investment', subtype: 'roth', removed: true }),
-      account({ account_id: 'off', type: 'investment', subtype: 'roth', included: false }),
+      account({ account_id: 'k1', name: '401k A', type: 'investment', tax_group: 'pre-tax', current_balance: 50000 }),
+      account({ account_id: 'k2', name: '401k B', type: 'investment', tax_group: 'pre-tax', current_balance: null }),
+      account({ account_id: 'r1', name: 'Roth', type: 'investment', tax_group: 'roth', current_balance: 12000.5 }),
+      account({ account_id: 'h1', name: 'HSA', type: 'depository', tax_group: 'health', current_balance: 3000 }),
+      account({ account_id: 'gone', type: 'investment', tax_group: 'roth', removed: true }),
+      account({ account_id: 'off', type: 'investment', tax_group: 'roth', included: false }),
     );
     return p;
   };
@@ -61,7 +57,7 @@ describe('taxSummary', () => {
 
   it('is empty without tax-advantaged accounts', () => {
     const p = makePayload();
-    p.accounts = p.accounts.filter((a) => a.subtype !== 'ira');
+    p.accounts = p.accounts.filter((a) => a.tax_group === null);
     expect(taxSummary(p, 'household')).toEqual({ groups: [], total: 0 });
   });
 });

@@ -33,6 +33,8 @@ export interface AccountOut {
   removed: boolean;
   duplicate_of_account: string | null;
   superseded_by: string | null;
+  /** pre-tax, roth, health, education or other for tax-advantaged accounts; null otherwise. */
+  tax_group: string | null;
 }
 
 export interface CategoryOut {
@@ -101,6 +103,9 @@ export interface HoldingOut {
   price: number | null;
   value: number | null;
   price_as_of: string | null;
+  /** Plaid's security type: equity, etf, mutual fund, cash, fixed income, cryptocurrency, ... */
+  security_type: string | null;
+  is_cash_equivalent: boolean;
 }
 
 export interface EstimateMetaOut {
@@ -128,6 +133,8 @@ export interface NetWorthScope {
   assets: number;
   debts: number;
   stale_accounts: number;
+  /** The part of assets held in retirement and other tax-advantaged accounts. */
+  retirement: number;
 }
 
 export interface NetWorthPoint {

@@ -3,6 +3,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 
+from bizviz.analytics.tax import tax_group
 from bizviz.api.schema import NetWorthOut, NetWorthPoint, NetWorthScope
 from bizviz.db.connection import Connection
 
@@ -17,19 +18,27 @@ class EligibleAccount:
     type: str
     ownership: str
     cutoff: str | None
+    tax_advantaged: bool
 
 
 def eligible_accounts(conn: Connection) -> list[EligibleAccount]:
     """Included, non-duplicate accounts with the last date they may contribute (YYYY-MM-DD)."""
     result = []
     for r in conn.execute(
-        "SELECT a.account_id, a.type, a.ownership, a.gone_at, i.removed_at FROM accounts a"
+        "SELECT a.account_id, a.type, a.subtype, a.ownership, a.gone_at, i.removed_at"
+        " FROM accounts a"
         " LEFT JOIN items i ON i.item_id = a.item_id"
         " WHERE a.included = 1 AND a.duplicate_of_account IS NULL ORDER BY a.account_id"
     ):
         ends = [str(v)[:10] for v in (r["gone_at"], r["removed_at"]) if v]
         result.append(
-            EligibleAccount(r["account_id"], r["type"], r["ownership"], min(ends) if ends else None)
+            EligibleAccount(
+                r["account_id"],
+                r["type"],
+                r["ownership"],
+                min(ends) if ends else None,
+                tax_group(r["subtype"]) is not None,
+            )
         )
     return result
 
@@ -51,8 +60,8 @@ def compute_net_worth(conn: Connection, today: date) -> NetWorthOut:
     dates = sorted(series_dates)
 
     totals = {
-        scope: [[0.0, 0.0, 0] for _ in dates] for scope in ("mine", "household")
-    }  # assets, debts, stale
+        scope: [[0.0, 0.0, 0, 0.0] for _ in dates] for scope in ("mine", "household")
+    }  # assets, debts, stale, of which assets in tax-advantaged accounts
     ordinals = [date.fromisoformat(d).toordinal() for d in dates]
     for acc in accounts:
         snaps = snapshots[acc.account_id]
@@ -80,12 +89,15 @@ def compute_net_worth(conn: Connection, today: date) -> NetWorthOut:
                 cell[0] += assets
                 cell[1] += debts
                 cell[2] += int(stale)
+                if acc.tax_advantaged:
+                    cell[3] += assets
 
     def scope_out(cell: list[float]) -> NetWorthScope:
         return {
             "assets": round(cell[0], 2),
             "debts": round(cell[1], 2),
             "stale_accounts": int(cell[2]),
+            "retirement": round(cell[3], 2),
         }
 
     series: list[NetWorthPoint] = [

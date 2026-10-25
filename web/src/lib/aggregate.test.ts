@@ -483,13 +483,16 @@ describe('netWorthSeries', () => {
       debts: 200,
       net: 800,
       stale_accounts: 0,
+      retirement: 300,
+      otherAssets: 700,
     });
     expect(r.current).toEqual(r.points[3]);
     expect(r.current?.net).toBe(1400);
   });
 
   it('uses household values for the household scope', () => {
-    expect(netWorthSeries(makePayload(), 'household', 'daily').current?.assets).toBe(2400);
+    const current = netWorthSeries(makePayload(), 'household', 'daily').current;
+    expect([current?.assets, current?.retirement, current?.otherAssets]).toEqual([2400, 900, 1500]);
   });
 
   it('monthly mean per month', () => {
@@ -499,6 +502,8 @@ describe('netWorthSeries', () => {
     expect(r.points[1].debts).toBe(100);
     expect(r.points[1].net).toBe(1100);
     expect(r.points[1].stale_accounts).toBe(2);
+    // Oct: retirement 300, 300, 400 and other assets 700, 900, 1000
+    expect([r.points[1].retirement, r.points[1].otherAssets]).toEqual([333.33, 866.67]);
     expect(r.current).toEqual(r.points[1]);
   });
 
