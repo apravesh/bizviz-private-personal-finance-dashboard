@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   EVERYDAY_EXCLUSION,
+  cardBillFilters,
   accountGains,
   accountLabel,
   estimateNotes,
@@ -8,6 +9,7 @@ import {
   investmentSeries,
   money,
   moneyAxis,
+  monthlyCardBills,
   monthlyEarnings,
   monthlySavings,
   monthlySpending,
@@ -173,6 +175,67 @@ describe('monthlyEarnings', () => {
     expect(byCat.series[0].label).toBe('Income');
     const byAcc = monthlyEarnings(p, 'household', 'account', TODAY);
     expect(byAcc.series.map((s) => s.key).sort()).toEqual(['acc-checking', 'acc-joint']);
+  });
+});
+
+describe('monthlyCardBills', () => {
+  const spend = (category = 'groceries') => ({ flow: 'spending', category_id: category, recurring: false });
+  const world = () => {
+    const p = makePayload();
+    p.transactions = [
+      tx('c1', '2026-09-03', 120, { account_id: 'acc-card', mine: spend(), household: spend() }),
+      tx('c2', '2026-10-04', 80, { account_id: 'acc-card', mine: spend('dining'), household: spend('dining'), pending: true }),
+      tx('refund', '2026-10-06', -30, { account_id: 'acc-card', mine: spend(), household: spend() }),
+      // Paying the linked card is a transfer: the purchases above already count.
+      tx('paid', '2026-09-20', 120, {
+        mine: { flow: 'internal', category_id: 'sys:transfer', recurring: false },
+        household: { flow: 'internal', category_id: 'sys:transfer', recurring: false },
+      }),
+      tx('other-card', '2026-09-15', 500, {
+        mine: spend('sys:cc_unlinked'),
+        household: spend('sys:cc_unlinked'),
+      }),
+      tx('rent', '2026-09-01', 2000, { mine: spend('rent'), household: spend('rent') }),
+      tx('joint-card', '2026-10-01', 40, {
+        account_id: 'acc-card',
+        mine: null,
+        household: spend(),
+      }),
+    ];
+    return p;
+  };
+
+  it('stacks linked-card purchases and unlinked-card payments; nothing else', () => {
+    const r = monthlyCardBills(world(), 'mine', TODAY);
+    expect(r.months).toEqual(['2026-09', '2026-10']);
+    expect(r.series).toEqual([
+      { key: 'acc-card', label: 'First Bank Visa ••2222', values: [120, 50] },
+      { key: 'unlinked-cards', label: 'Payments to unlinked cards', values: [500, 0] },
+    ]);
+    expect(r.totals).toEqual([620, 50]);
+    expect(r.pendingByMonth).toEqual([0, 80]);
+    expect(r.inProgress).toBe('2026-10');
+  });
+
+  it('follows the scope', () => {
+    expect(monthlyCardBills(world(), 'household', TODAY).totals).toEqual([620, 90]);
+  });
+
+  it('a bar segment opens exactly its transactions', () => {
+    const p = world();
+    const r = monthlyCardBills(p, 'mine', TODAY);
+    for (const series of r.series) {
+      r.months.forEach((month, i) => {
+        const list = filterTransactions(p, 'mine', { ...EMPTY_FILTERS, ...cardBillFilters(series.key, month) });
+        expect(flowTotal(list, 'spending')).toBe(series.values[i]);
+      });
+    }
+  });
+
+  it('is empty without card activity', () => {
+    const p = makePayload();
+    p.transactions = p.transactions.filter((t) => t.account_id !== 'acc-card');
+    expect(monthlyCardBills(p, 'mine', TODAY).series).toEqual([]);
   });
 });
 

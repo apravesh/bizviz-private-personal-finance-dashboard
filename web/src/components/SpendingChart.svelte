@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { DataPayload } from '../lib/types';
+  import CardBillsChart from './CardBillsChart.svelte';
   import MonthlyChart from './MonthlyChart.svelte';
   import SpendingPie from './SpendingPie.svelte';
 
@@ -18,5 +19,6 @@
     { value: 'recurring', label: 'Recurring vs one-off' },
   ]}
 >
+  <CardBillsChart {payload} />
   <SpendingPie {payload} />
 </MonthlyChart>
