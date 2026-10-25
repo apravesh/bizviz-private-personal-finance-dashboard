@@ -6,13 +6,26 @@
   import type { DataPayload } from '../lib/types';
   import Chart from './Chart.svelte';
 
-  let { payload }: { payload: DataPayload } = $props();
+  interface Props {
+    payload: DataPayload;
+    /** Distinguishes several copies of this section (memo keys, element ids). */
+    id?: string;
+    title?: string;
+    emptyText?: string;
+  }
+
+  let {
+    payload,
+    id = 'investments',
+    title = 'Investments',
+    emptyText = 'No investment accounts in this view.',
+  }: Props = $props();
 
   let granularity = $state<Granularity>('daily');
   let view = $state<'value' | 'gains'>('value');
 
   const accounts = $derived(
-    memoized(['investments', payload.data_version, $store.scope, granularity, view], () =>
+    memoized([id, payload.data_version, $store.scope, granularity, view], () =>
       view === 'gains'
         ? investmentGainsSeries(payload, $store.scope, granularity)
         : investmentSeries(payload, $store.scope, granularity),
@@ -30,16 +43,16 @@
   );
 </script>
 
-<section class="card" aria-labelledby="investments-title">
+<section class="card" aria-labelledby="{id}-title">
   <div class="row head">
-    <h2 id="investments-title">Investments</h2>
-    <div class="seg" role="group" aria-label="Investments view">
+    <h2 id="{id}-title">{title}</h2>
+    <div class="seg" role="group" aria-label="{title} view">
       <button type="button" aria-pressed={view === 'value'} onclick={() => (view = 'value')}>Account value</button>
       <button type="button" aria-pressed={view === 'gains'} onclick={() => (view = 'gains')}>
         Gains (excl. deposits)
       </button>
     </div>
-    <div class="seg" role="group" aria-label="Investments granularity">
+    <div class="seg" role="group" aria-label="{title} granularity">
       <button type="button" aria-pressed={granularity === 'daily'} onclick={() => (granularity = 'daily')}>Daily</button>
       <button type="button" aria-pressed={granularity === 'monthly'} onclick={() => (granularity = 'monthly')}>
         Monthly average
@@ -48,7 +61,7 @@
   </div>
 
   {#if accounts.length === 0}
-    <p class="muted">No investment accounts in this view.</p>
+    <p class="muted">{emptyText}</p>
   {:else}
     <Chart
       {option}

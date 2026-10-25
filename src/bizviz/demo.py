@@ -53,6 +53,8 @@ CARD_1 = "demo-card-1"
 CARD_2 = "demo-card-2"
 MORTGAGE = "demo-mortgage"
 BROKERAGE = "demo-brokerage"
+RETIRE_401K = "demo-401k"
+RETIRE_ROTH = "demo-roth-ira"
 
 SEC_VTI = "demo-sec-vti"
 SEC_VTSAX = "demo-sec-vtsax"
@@ -529,6 +531,65 @@ class _Brokerage:
     balance_by_day: dict[date, float]
 
 
+def _retirement(
+    account_id: str,
+    start: date,
+    today: date,
+    src: SyntheticPriceSource,
+    opening_shares: float,
+    monthly: float,
+    payday: int,
+) -> _Brokerage:
+    """A retirement account that buys one index fund with each month's contribution."""
+    qty = opening_shares
+    txns: list[_InvTxn] = []
+    qty_after: dict[date, float] = {}
+    for n, month in enumerate(_months(start, today - timedelta(days=1)), start=1):
+        d = _weekday_on_or_after(date(month.year, month.month, payday))
+        if not start <= d < today:
+            continue
+        price = src.raw_close("VTSAX", d)
+        shares = round(monthly / price, 4)
+        amount = round(shares * price, 2)
+        txns.append(
+            _InvTxn(
+                f"{account_id}-c{n:03d}",
+                d,
+                None,
+                "Contribution",
+                "cash",
+                "contribution",
+                None,
+                -amount,
+                None,
+            )
+        )
+        txns.append(
+            _InvTxn(
+                f"{account_id}-b{n:03d}",
+                d,
+                SEC_VTSAX,
+                "Buy VTSAX",
+                "buy",
+                "buy",
+                shares,
+                amount,
+                price,
+            )
+        )
+        qty += shares
+        qty_after[d] = qty
+    balance_by_day: dict[date, float] = {}
+    held = opening_shares
+    day = start
+    while day <= today:
+        held = qty_after.get(day, held)
+        if day >= today - timedelta(days=SNAPSHOT_DAYS - 1):
+            balance_by_day[day] = round(held * src.raw_close("VTSAX", day), 2)
+        day += timedelta(days=1)
+    return _Brokerage(txns, {SEC_VTSAX: qty}, 0.0, balance_by_day)
+
+
 def _brokerage(start: date, today: date, src: SyntheticPriceSource) -> _Brokerage:
     split_day = src.split_date
     events: list[tuple[date, int, str]] = []
@@ -667,6 +728,10 @@ def populate(conn: Connection, today: date) -> None:
     _card_payments(ledger, today)
     ledger.txns.sort(key=lambda t: (t.date, t.id))
     brokerage = _brokerage(start, today, src)
+    retirement = {
+        RETIRE_401K: _retirement(RETIRE_401K, start, today, src, 520.0, 1600.0, 15),
+        RETIRE_ROTH: _retirement(RETIRE_ROTH, start, today, src, 210.0, 580.0, 2),
+    }
 
     snapshot_days = [today - timedelta(days=i) for i in range(SNAPSHOT_DAYS - 1, -1, -1)]
     balances: dict[str, dict[date, float]] = {
@@ -676,6 +741,7 @@ def populate(conn: Connection, today: date) -> None:
         CARD_1: _balances(ledger.txns, CARD_1, start, today, debt=True),
         CARD_2: _balances(ledger.txns, CARD_2, start, today, debt=True),
         BROKERAGE: brokerage.balance_by_day,
+        **{aid: r.balance_by_day for aid, r in retirement.items()},
     }
     balances[MORTGAGE] = {
         d: round(312450.17 + 540.0 * ((today.year * 12 + today.month) - (d.year * 12 + d.month)), 2)
@@ -687,6 +753,7 @@ def populate(conn: Connection, today: date) -> None:
         ("demo-item-cards", "demo_cards", "Demo Card Co", "bank", 0),
         ("demo-item-mortgage", "demo_mortgage", "Demo Mortgage", "loan", 0),
         ("demo-item-brokerage", "demo_brokerage", "Demo Brokerage", "investment", 1),
+        ("demo-item-retirement", "demo_retirement", "Demo Retirement", "investment", 1),
     )
     accounts: tuple[tuple[str, str, str, str, str | None, str, str], ...] = (
         (CHECKING, "demo-item-bank", "Everyday Checking", "depository", "checking", "mine", "1001"),
@@ -704,6 +771,16 @@ def populate(conn: Connection, today: date) -> None:
             "mine",
             "7007",
         ),
+        (
+            RETIRE_401K,
+            "demo-item-retirement",
+            "Employer 401(k)",
+            "investment",
+            "401k",
+            "mine",
+            "8008",
+        ),
+        (RETIRE_ROTH, "demo-item-retirement", "Roth IRA", "investment", "roth", "mine", "9009"),
     )
 
     holdings = (
@@ -833,7 +910,7 @@ def populate(conn: Connection, today: date) -> None:
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
-                    BROKERAGE,
+                    account_id,
                     sid,
                     today.isoformat(),
                     quantity,
@@ -842,7 +919,13 @@ def populate(conn: Connection, today: date) -> None:
                     round(quantity * price, 2),
                     stamp,
                 )
-                for sid, quantity, price in holdings
+                for account_id, sid, quantity, price in [
+                    *((BROKERAGE, sid, q, pr) for sid, q, pr in holdings),
+                    *(
+                        (aid, SEC_VTSAX, r.qty[SEC_VTSAX], src.raw_close("VTSAX", today))
+                        for aid, r in retirement.items()
+                    ),
+                ]
             ],
         )
         conn.executemany(
@@ -852,7 +935,7 @@ def populate(conn: Connection, today: date) -> None:
             [
                 (
                     t.id,
-                    BROKERAGE,
+                    account_id,
                     t.security_id,
                     t.day.isoformat(),
                     t.name,
@@ -862,7 +945,8 @@ def populate(conn: Connection, today: date) -> None:
                     t.amount,
                     t.price,
                 )
-                for t in brokerage.txns
+                for account_id, source in ((BROKERAGE, brokerage), *retirement.items())
+                for t in source.txns
             ],
         )
 
