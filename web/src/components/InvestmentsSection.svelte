@@ -1,6 +1,14 @@
 <script lang="ts">
-  import { investmentGainsSeries, investmentSeries, memoized, money, type Granularity } from '../lib/aggregate';
-  import { investmentOption } from '../lib/chartOptions';
+  import {
+    investmentGainsSeries,
+    investmentSeries,
+    memoized,
+    money,
+    stackAccountsByMonth,
+    type Granularity,
+    type InvestmentAccountSeries,
+  } from '../lib/aggregate';
+  import { investmentOption, stackedMonthsOption } from '../lib/chartOptions';
   import { formatDate } from '../lib/format';
   import { store } from '../lib/store';
   import type { DataPayload } from '../lib/types';
@@ -12,6 +20,11 @@
     id?: string;
     title?: string;
     emptyText?: string;
+    /** Draw stacked monthly bars instead of one line per account. */
+    stacked?: boolean;
+    /** With stacked bars, offer a split by these groups (account id -> group) besides by account. */
+    groupOf?: (accountId: string) => { key: string; label: string };
+    groupLabel?: string;
   }
 
   let {
@@ -19,10 +32,16 @@
     id = 'investments',
     title = 'Investments',
     emptyText = 'No investment accounts in this view.',
+    stacked = false,
+    groupOf,
+    groupLabel = 'Group',
   }: Props = $props();
 
-  let granularity = $state<Granularity>('daily');
+  let chosenGranularity = $state<Granularity>('daily');
   let view = $state<'value' | 'gains'>('value');
+  let split = $state<'account' | 'group'>('account');
+  // Stacked bars need every account on the same dates, so they use monthly averages.
+  const granularity = $derived<Granularity>(stacked ? 'monthly' : chosenGranularity);
 
   const accounts = $derived(
     memoized([id, payload.data_version, $store.scope, granularity, view], () =>
@@ -31,7 +50,12 @@
         : investmentSeries(payload, $store.scope, granularity),
     ),
   );
-  const option = $derived(investmentOption(accounts));
+  const option = $derived.by(() => {
+    if (!stacked) return investmentOption(accounts);
+    const byGroup =
+      split === 'group' && groupOf ? (a: InvestmentAccountSeries) => groupOf(a.account_id) : undefined;
+    return stackedMonthsOption(stackAccountsByMonth(accounts, byGroup), view === 'gains' ? 'Total gains' : 'Total value');
+  });
   const noFlowsReported = $derived(
     accounts.filter((a) => payload.investments.find((i) => i.account_id === a.account_id)?.flows.length === 0),
   );
@@ -52,12 +76,23 @@
         Gains (excl. deposits)
       </button>
     </div>
-    <div class="seg" role="group" aria-label="{title} granularity">
-      <button type="button" aria-pressed={granularity === 'daily'} onclick={() => (granularity = 'daily')}>Daily</button>
-      <button type="button" aria-pressed={granularity === 'monthly'} onclick={() => (granularity = 'monthly')}>
-        Monthly average
-      </button>
-    </div>
+    {#if stacked}
+      {#if groupOf}
+        <div class="seg" role="group" aria-label="{title} split">
+          <button type="button" aria-pressed={split === 'account'} onclick={() => (split = 'account')}>By account</button>
+          <button type="button" aria-pressed={split === 'group'} onclick={() => (split = 'group')}>By {groupLabel}</button>
+        </div>
+      {/if}
+    {:else}
+      <div class="seg" role="group" aria-label="{title} granularity">
+        <button type="button" aria-pressed={granularity === 'daily'} onclick={() => (chosenGranularity = 'daily')}
+          >Daily</button
+        >
+        <button type="button" aria-pressed={granularity === 'monthly'} onclick={() => (chosenGranularity = 'monthly')}>
+          Monthly average
+        </button>
+      </div>
+    {/if}
   </div>
 
   {#if accounts.length === 0}
@@ -82,9 +117,16 @@
         </p>
       {/if}
     {/if}
-    <p class="muted">
-      Dashed = estimated from transactions and public prices; solid = values reported by your institution.
-    </p>
+    {#if stacked}
+      <p class="muted">
+        Monthly averages, stacked. Hatched bars include values estimated from transactions and public prices
+        (before you linked); solid bars are values reported by your institution.
+      </p>
+    {:else}
+      <p class="muted">
+        Dashed = estimated from transactions and public prices; solid = values reported by your institution.
+      </p>
+    {/if}
     <ul class="notes">
       {#each accounts as account (account.account_id)}
         {#if account.meta}

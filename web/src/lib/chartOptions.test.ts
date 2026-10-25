@@ -13,6 +13,8 @@ import {
   SAVED_COLOR,
   savingsOption,
   savingsTooltipHtml,
+  stackedMonthsOption,
+  stackedMonthsTooltipHtml,
 } from './chartOptions';
 import { makePayload, TODAY } from './__fixtures__/payload';
 
@@ -138,6 +140,41 @@ describe('categoryPieOption', () => {
 
   it('escapes category names', () => {
     expect(pieTooltipHtml({ key: 'x', label: '<b>x</b>', value: 1 }, 1)).not.toContain('<b>x');
+  });
+});
+
+describe('stackedMonthsOption', () => {
+  const result = {
+    months: ['2026-09', '2026-10'],
+    series: [
+      { key: 'k1', label: '401k <A>', values: [100, 120] },
+      { key: 'r1', label: 'Roth', values: [null, 30] },
+    ],
+    totals: [100, 150],
+    estimated: [true, false],
+  };
+  const option = stackedMonthsOption(result, 'Total value') as Opt;
+
+  it('stacks one bar series per layer and hatches estimated months', () => {
+    expect(option.series.map((s: Opt) => [s.id, s.type, s.stack])).toEqual([
+      ['k1', 'bar', 'total'],
+      ['r1', 'bar', 'total'],
+    ]);
+    expect(option.series[0].data[0]).toMatchObject({ value: 100, itemStyle: { decal: expect.any(Object) } });
+    expect(option.series[0].data[1]).toBe(120);
+    expect(option.series[1].data[0]).toBeNull();
+    expect(option.xAxis.axisLabel.formatter('2026-10')).toBe('Oct 2026');
+  });
+
+  it('tooltip lists layers with a value, the total and the estimate note', () => {
+    const sep = stackedMonthsTooltipHtml(result, 0, 'Total value');
+    expect(sep).toContain('401k &#60;A&#62;: $100.00');
+    expect(sep).not.toContain('Roth');
+    expect(sep).toContain('Total value: $100.00');
+    expect(sep).toContain('includes estimated values');
+    const oct = stackedMonthsTooltipHtml(result, 1, 'Total value');
+    expect(oct).toContain('Roth: $30.00');
+    expect(oct).not.toContain('estimated');
   });
 });
 

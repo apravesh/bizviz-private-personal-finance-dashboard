@@ -7,6 +7,7 @@ import type {
   MonthlyResult,
   NetWorthSeriesPoint,
   SavingsResult,
+  StackedMonths,
 } from './aggregate';
 import { escapeHtml, monthLabel } from './format';
 
@@ -203,6 +204,63 @@ export function categoryPieOption(breakdown: Pick<CategoryBreakdown, 'slices' | 
         data: breakdown.slices.map((s) => ({ id: s.key, name: s.label, value: s.value })),
       },
     ],
+  };
+}
+
+export function stackedMonthsTooltipHtml(
+  result: StackedMonths,
+  index: number,
+  totalLabel: string,
+  marker: (key: string) => string = () => '',
+): string {
+  const lines = [`<strong>${escapeHtml(monthLabel(result.months[index]))}</strong>`];
+  for (const s of result.series) {
+    const value = s.values[index];
+    if (value !== null) lines.push(`${marker(s.key)}${escapeHtml(s.label)}: ${money(value)}`);
+  }
+  lines.push(`<strong>${escapeHtml(totalLabel)}: ${money(result.totals[index])}</strong>`);
+  if (result.estimated[index]) lines.push('includes estimated values');
+  return lines.join('<br/>');
+}
+
+/** One stacked bar per month (monthly averages); months with estimated values are hatched. */
+export function stackedMonthsOption(result: StackedMonths, totalLabel: string): EChartsCoreOption {
+  const n = result.months.length;
+  return {
+    color: PALETTE,
+    aria: { enabled: true, decal: { show: false } },
+    animation: false,
+    grid: { left: 8, right: 12, top: 40, bottom: 64, containLabel: true },
+    legend: { type: 'scroll', top: 0 },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      confine: true,
+      formatter: (params: unknown) => {
+        const list = params as { dataIndex: number; seriesId: string; marker: string }[];
+        if (!list.length) return '';
+        const markers = new Map(list.map((p) => [p.seriesId, p.marker]));
+        return stackedMonthsTooltipHtml(result, list[0].dataIndex, totalLabel, (key) => markers.get(key) ?? '');
+      },
+    },
+    xAxis: {
+      type: 'category',
+      data: result.months,
+      axisLabel: { hideOverlap: true, formatter: (value: string) => monthLabel(value) },
+    },
+    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => moneyAxis(v) } },
+    dataZoom: monthZoom(n),
+    series: result.series.map((s) => ({
+      id: s.key,
+      name: s.label,
+      type: 'bar',
+      stack: 'total',
+      barMaxWidth: 36,
+      emphasis: { focus: 'series' },
+      data: s.values.map((value, i) =>
+        result.estimated[i] && value !== null ? { value, itemStyle: { decal: CURRENT_MONTH_DECAL } } : value,
+      ),
+    })),
   };
 }
 
