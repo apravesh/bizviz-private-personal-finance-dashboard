@@ -258,6 +258,25 @@ export function monthlySavings(payload: DataPayload, scope: Scope, today: Today)
 
 export type PiePeriod = 'this-month' | 'last-month' | 'last-3' | 'last-12' | 'all';
 
+export const RENT_AND_UTILITIES = 'plaid:RENT_AND_UTILITIES';
+const RENT_DETAIL = 'RENT_AND_UTILITIES_RENT';
+
+/** A rent payment: Plaid says rent and the user has not moved it to another category. */
+export function isRent(tx: TransactionOut, cls: ScopeClass): boolean {
+  return tx.pfc_detailed === RENT_DETAIL && cls.category_id === RENT_AND_UTILITIES;
+}
+
+export interface SpendingExclusion {
+  categories: string[];
+  rent: boolean;
+}
+
+/** The second pie: day-to-day spending without card payoffs BizViz can't see into, rent and transfers out. */
+export const EVERYDAY_EXCLUSION: SpendingExclusion = {
+  categories: ['sys:cc_unlinked', 'sys:transfers_out'],
+  rent: true,
+};
+
 export interface CategorySlice {
   key: string;
   label: string;
@@ -276,6 +295,8 @@ export interface CategoryBreakdown {
   netRefundCategories: string[];
   /** Category ids folded into the "Other" slice. */
   otherKeys: string[];
+  /** Rent payments were left out, so the Rent & Utilities slice is utilities only. */
+  excludesRent: boolean;
 }
 
 const PIE_TOP = 9;
@@ -301,13 +322,25 @@ export function spendingByCategory(
   scope: Scope,
   period: PiePeriod,
   today: Today,
+  exclusion: SpendingExclusion | null = null,
 ): CategoryBreakdown {
-  const result = compute(payload, scope, 'spending', 'category', today).result;
+  const kept = exclusion
+    ? {
+        ...payload,
+        transactions: payload.transactions.filter((tx) => {
+          const cls = scopeClass(tx, scope);
+          if (!cls) return true;
+          return !exclusion.categories.includes(cls.category_id) && !(exclusion.rent && isRent(tx, cls));
+        }),
+      }
+    : payload;
+  const result = compute(kept, scope, 'spending', 'category', today).result;
   const chosen = new Set(periodMonths(result.months, result.inProgress, period));
   const indexes = result.months.map((m, i) => (chosen.has(m) ? i : -1)).filter((i) => i >= 0);
+  const excludesRent = exclusion?.rent ?? false;
   const sums = result.series.map((s) => ({
     key: s.key,
-    label: s.label,
+    label: excludesRent && s.key === RENT_AND_UTILITIES ? 'Utilities (excl. rent)' : s.label,
     value: round2(indexes.reduce((sum, i) => sum + s.values[i], 0)),
   }));
   const positive = sums.filter((s) => s.value > 0).sort((a, b) => b.value - a.value || a.key.localeCompare(b.key));
@@ -330,6 +363,7 @@ export function spendingByCategory(
     includesInProgress: chosen.has(result.inProgress),
     netRefundCategories: sums.filter((s) => s.value < 0).map((s) => s.label),
     otherKeys,
+    excludesRent,
   };
 }
 
@@ -337,7 +371,15 @@ export function spendingByCategory(
 export function sliceFilters(
   breakdown: CategoryBreakdown,
   sliceKey: string,
-): { flow: string; month?: string; from?: string; to?: string; category?: string; categories?: string[] } {
+): {
+  flow: string;
+  month?: string;
+  from?: string;
+  to?: string;
+  category?: string;
+  categories?: string[];
+  excludeRent?: boolean;
+} {
   const period =
     breakdown.from === null
       ? {}
@@ -345,7 +387,7 @@ export function sliceFilters(
         ? { month: breakdown.from }
         : { from: breakdown.from, to: breakdown.to ?? undefined };
   const categories = sliceKey === OTHER_KEY ? { categories: breakdown.otherKeys } : { category: sliceKey };
-  return { flow: 'spending', ...period, ...categories };
+  return { flow: 'spending', ...period, ...categories, ...(breakdown.excludesRent ? { excludeRent: true } : {}) };
 }
 
 export function seriesTransactions(

@@ -107,6 +107,7 @@ describe('link filters', () => {
       to: '2026-09',
       account: 'acc-1',
       categories: ['a', 'b'],
+      excludeRent: true,
       flow: 'spending',
       suspectOnly: true,
     };

@@ -1,4 +1,4 @@
-import { accountLabel, scopeClass } from './aggregate';
+import { accountLabel, isRent, scopeClass } from './aggregate';
 import type { DataPayload, Scope, TransactionOut } from './types';
 
 export interface TxFilters {
@@ -11,6 +11,8 @@ export interface TxFilters {
   category: string;
   /** Several categories at once, e.g. the ones folded into a pie chart's "Other" slice. */
   categories: string[];
+  /** Leave out rent payments, as the "excluding rent" spending pie does. */
+  excludeRent: boolean;
   flow: string;
   suspectOnly: boolean;
 }
@@ -23,6 +25,7 @@ export const EMPTY_FILTERS: TxFilters = {
   account: '',
   category: '',
   categories: [],
+  excludeRent: false,
   flow: '',
   suspectOnly: false,
 };
@@ -43,6 +46,7 @@ export function filterTransactions(payload: DataPayload, scope: Scope, f: TxFilt
     if (f.account && tx.account_id !== f.account) return false;
     if (f.category && cls.category_id !== f.category) return false;
     if (f.categories.length > 0 && !f.categories.includes(cls.category_id)) return false;
+    if (f.excludeRent && isRent(tx, cls)) return false;
     if (f.flow && cls.flow !== f.flow) return false;
     if (needle) {
       const haystack = `${tx.merchant_display ?? ''}\n${tx.name ?? ''}`.toLowerCase();
@@ -60,7 +64,7 @@ export function flowTotal(list: TransactionOut[], flow: string): number | null {
   return Math.round(list.reduce((sum, tx) => sum + sign * tx.amount, 0) * 100) / 100;
 }
 
-const PARAM_KEYS = ['q', 'month', 'from', 'to', 'account', 'category', 'flow', 'suspect'] as const;
+const PARAM_KEYS = ['q', 'month', 'from', 'to', 'account', 'category', 'norent', 'flow', 'suspect'] as const;
 
 /** Filters from the Transactions page's URL (`#/transactions?...`). */
 export function filtersFromParams(params: URLSearchParams): TxFilters {
@@ -73,6 +77,7 @@ export function filtersFromParams(params: URLSearchParams): TxFilters {
     account: params.get('account') ?? '',
     category: categories.length === 1 ? categories[0] : '',
     categories: categories.length > 1 ? categories : [],
+    excludeRent: params.get('norent') === '1',
     flow: params.get('flow') ?? '',
     suspectOnly: params.get('suspect') === '1',
   };
@@ -87,6 +92,7 @@ export function transactionsHref(f: Partial<TxFilters>): string {
     to: f.to ?? '',
     account: f.account ?? '',
     category: f.categories?.length ? f.categories.join(',') : (f.category ?? ''),
+    norent: f.excludeRent ? '1' : '',
     flow: f.flow ?? '',
     suspect: f.suspectOnly ? '1' : '',
   };

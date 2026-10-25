@@ -132,7 +132,8 @@ def _transactions(conn: Connection) -> list[TransactionOut]:
     out: list[TransactionOut] = []
     for r in conn.execute(
         "SELECT t.transaction_id, t.account_id, t.date, t.amount, t.name, t.pending,"
-        " c.merchant_key, c.merchant_display, c.mine_flow, c.mine_category_id, c.mine_recurring,"
+        " t.pfc_detailed, c.merchant_key, c.merchant_display, c.mine_flow, c.mine_category_id,"
+        " c.mine_recurring,"
         " c.household_flow, c.household_category_id, c.household_recurring,"
         " o.transaction_id AS ov_id, o.category_id AS ov_category, o.flow_class AS ov_flow,"
         " o.recurring AS ov_recurring"
@@ -159,6 +160,7 @@ def _transactions(conn: Connection) -> list[TransactionOut]:
                 "merchant_key": r["merchant_key"],
                 "merchant_display": r["merchant_display"],
                 "pending": bool(r["pending"]),
+                "pfc_detailed": r["pfc_detailed"],
                 "mine": _scope(r["mine_flow"], r["mine_category_id"], r["mine_recurring"]),
                 "household": _scope(
                     r["household_flow"], r["household_category_id"], r["household_recurring"]
