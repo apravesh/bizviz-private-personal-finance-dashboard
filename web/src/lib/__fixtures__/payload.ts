@@ -46,6 +46,7 @@ export function tx(
     merchant_key: `merchant-${id}`,
     merchant_display: `Merchant ${id}`,
     pending: false,
+    pfc_detailed: null,
     mine: cls(flow, category),
     household: cls(flow, category),
     override: null,

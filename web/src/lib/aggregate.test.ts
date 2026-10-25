@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  EVERYDAY_EXCLUSION,
   accountGains,
   accountLabel,
   investmentGainsSeries,
@@ -288,6 +289,54 @@ describe('sliceFilters', () => {
     expect(r.otherKeys).toEqual(['cat3', 'cat2', 'cat1']);
     for (const slice of r.slices) {
       const list = filterTransactions(p, 'mine', { ...EMPTY_FILTERS, ...sliceFilters(r, slice.key) });
+      expect(flowTotal(list, 'spending')).toBe(slice.value);
+    }
+  });
+});
+
+describe('spendingByCategory with the everyday exclusion', () => {
+  const spend = (category: string, extra: Partial<Parameters<typeof tx>[3]> = {}) => ({
+    mine: { flow: 'spending' as const, category_id: category, recurring: false },
+    ...extra,
+  });
+  const world = () => {
+    const p = makePayload();
+    p.transactions = [
+      tx('food', '2026-09-03', 100, spend('plaid:FOOD_AND_DRINK')),
+      tx('rent', '2026-09-01', 2000, spend('plaid:RENT_AND_UTILITIES', { pfc_detailed: 'RENT_AND_UTILITIES_RENT' })),
+      tx('power', '2026-09-05', 80, spend('plaid:RENT_AND_UTILITIES', { pfc_detailed: 'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY' })),
+      // Plaid says rent, but the user moved it to Home Improvement: no longer rent.
+      tx('moved', '2026-09-06', 300, spend('plaid:HOME_IMPROVEMENT', { pfc_detailed: 'RENT_AND_UTILITIES_RENT' })),
+      tx('card', '2026-09-10', 900, spend('sys:cc_unlinked')),
+      tx('zelle', '2026-09-12', 250, spend('sys:transfers_out')),
+    ];
+    return p;
+  };
+
+  it('the plain pie keeps everything', () => {
+    const r = spendingByCategory(world(), 'mine', 'last-month', TODAY);
+    expect(r.total).toBe(3630);
+    expect(r.excludesRent).toBe(false);
+  });
+
+  it('leaves out unlinked-card payments, transfers out and rent, keeping utilities', () => {
+    const r = spendingByCategory(world(), 'mine', 'last-month', TODAY, EVERYDAY_EXCLUSION);
+    expect(r.slices).toEqual([
+      { key: 'plaid:HOME_IMPROVEMENT', label: 'plaid:HOME_IMPROVEMENT', value: 300 },
+      { key: 'plaid:FOOD_AND_DRINK', label: 'plaid:FOOD_AND_DRINK', value: 100 },
+      { key: 'plaid:RENT_AND_UTILITIES', label: 'Utilities (excl. rent)', value: 80 },
+    ]);
+    expect(r.total).toBe(480);
+    expect(r.excludesRent).toBe(true);
+  });
+
+  it('clicking any of its slices lists exactly that slice', () => {
+    const p = world();
+    const r = spendingByCategory(p, 'mine', 'last-month', TODAY, EVERYDAY_EXCLUSION);
+    for (const slice of r.slices) {
+      const f = sliceFilters(r, slice.key);
+      expect(f.excludeRent).toBe(true);
+      const list = filterTransactions(p, 'mine', { ...EMPTY_FILTERS, ...f });
       expect(flowTotal(list, 'spending')).toBe(slice.value);
     }
   });

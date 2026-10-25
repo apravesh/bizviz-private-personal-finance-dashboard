@@ -72,6 +72,8 @@ export interface TransactionOut {
   merchant_key: string | null;
   merchant_display: string | null;
   pending: boolean;
+  /** Plaid's detailed category, e.g. RENT_AND_UTILITIES_RENT. */
+  pfc_detailed: string | null;
   mine: ScopeClass | null;
   household: ScopeClass | null;
   override: OverrideOut | null;

@@ -73,6 +73,7 @@ class TransactionOut(TypedDict):
     merchant_key: str | None
     merchant_display: str | None
     pending: bool
+    pfc_detailed: str | None
     mine: ScopeClass | None
     household: ScopeClass | None
     override: OverrideOut | None

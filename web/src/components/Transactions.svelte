@@ -26,6 +26,7 @@
     filters.account;
     filters.category;
     filters.categories;
+    filters.excludeRent;
     filters.flow;
     filters.suspectOnly;
     page = 0;
@@ -91,7 +92,7 @@
       </label>
     </div>
 
-    {#if filters.from || filters.to || filters.categories.length > 0}
+    {#if filters.from || filters.to || filters.categories.length > 0 || filters.excludeRent}
       <div class="row chips">
         {#if filters.from || filters.to}
           <button
@@ -112,6 +113,14 @@
             aria-label="Remove the {filters.categories.length} categories filter"
             onclick={() => (filters.categories = [])}
             >{filters.categories.length} categories ({filters.categories.map((c) => categoryNames.get(c) ?? c).join(', ')}) ×</button
+          >
+        {/if}
+        {#if filters.excludeRent}
+          <button
+            type="button"
+            class="chip"
+            aria-label="Remove the excluding rent filter"
+            onclick={() => (filters.excludeRent = false)}>Excluding rent ×</button
           >
         {/if}
         <button type="button" class="link" onclick={clearAll}>Clear all filters</button>

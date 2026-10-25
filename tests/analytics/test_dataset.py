@@ -10,7 +10,16 @@ from tests.analytics.conftest import TODAY, World
 
 
 def populate(db: Connection, w: World) -> None:
-    w.tx("t1", w.chk, "2026-10-01", 12.5, "FOOD_AND_DRINK", name="Cafe", merchant_name="Cafe")
+    w.tx(
+        "t1",
+        w.chk,
+        "2026-10-01",
+        12.5,
+        "FOOD_AND_DRINK",
+        "FOOD_AND_DRINK_COFFEE",
+        name="Cafe",
+        merchant_name="Cafe",
+    )
     w.tx("t2", w.joint, "2026-10-02", 40, "GENERAL_MERCHANDISE", name="Store", pending=True)
     w.tx("loan-tx", w.loan, "2026-10-02", 40, "LOAN_PAYMENTS")
     w.tx("brk-tx", w.brokerage, "2026-10-02", 1)
@@ -103,6 +112,7 @@ def test_transactions_only_cash_flow_accounts(db: Connection, world: World) -> N
     )
     assert t2["mine"] is None and t2["household"]["flow"] == "spending"
     assert t2["override"] is None and t2["pending"] is True
+    assert t1["pfc_detailed"] == "FOOD_AND_DRINK_COFFEE" and t2["pfc_detailed"] is None
 
 
 def test_accounts_rules_categories_status(db: Connection, world: World) -> None:
