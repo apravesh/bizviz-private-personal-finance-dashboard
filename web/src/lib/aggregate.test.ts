@@ -3,6 +3,7 @@ import {
   EVERYDAY_EXCLUSION,
   accountGains,
   accountLabel,
+  estimateNotes,
   investmentGainsSeries,
   investmentSeries,
   money,
@@ -470,6 +471,40 @@ describe('investmentGainsSeries', () => {
     expect(account.actual).toEqual([
       ['2026-09-15', 10],
       ['2026-10-15', 20],
+    ]);
+  });
+});
+
+describe('estimateNotes', () => {
+  const meta = (over: Record<string, unknown>) => ({
+    anchor_date: null,
+    window_start: null,
+    window_end: null,
+    excluded_count: 0,
+    excluded_value: 0,
+    warnings: [],
+    status: 'ok',
+    ...over,
+  });
+  it('lists downloading, excluded holdings and warnings per account, in order', () => {
+    const notes = estimateNotes([
+      { account_id: 'a', label: 'A', actual: [], estimated: [], meta: meta({ status: 'downloading' }) },
+      { account_id: 'b', label: 'B', actual: [], estimated: [], meta: null },
+      {
+        account_id: 'c',
+        label: 'C',
+        actual: [],
+        estimated: [],
+        meta: meta({ excluded_count: 1, excluded_value: 4.53, warnings: ['w1', 'w2'] }),
+      },
+      { account_id: 'd', label: 'D', actual: [], estimated: [], meta: meta({ excluded_count: 2, excluded_value: 10 }) },
+    ]);
+    expect(notes).toEqual([
+      'A: Investment history is still downloading.',
+      "C: Estimate excludes 1 holding ($4.53 of today's value).",
+      'C: w1',
+      'C: w2',
+      "D: Estimate excludes 2 holdings ($10.00 of today's value).",
     ]);
   });
 });

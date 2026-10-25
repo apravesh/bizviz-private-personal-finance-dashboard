@@ -538,6 +538,24 @@ export function stackAccountsByMonth(
   };
 }
 
+/** Notes on each account's estimated history: still downloading, excluded holdings, warnings. */
+export function estimateNotes(accounts: InvestmentAccountSeries[]): string[] {
+  const notes: string[] = [];
+  for (const account of accounts) {
+    const meta = account.meta;
+    if (!meta) continue;
+    if (meta.status === 'downloading') notes.push(`${account.label}: Investment history is still downloading.`);
+    if (meta.excluded_count > 0) {
+      const what = meta.excluded_count === 1 ? 'holding' : 'holdings';
+      notes.push(
+        `${account.label}: Estimate excludes ${meta.excluded_count} ${what} (${money(meta.excluded_value)} of today's value).`,
+      );
+    }
+    for (const warning of meta.warnings) notes.push(`${account.label}: ${warning}`);
+  }
+  return notes;
+}
+
 export function netWorthSeries(
   payload: DataPayload,
   scope: Scope,

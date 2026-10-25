@@ -1,9 +1,9 @@
 <script lang="ts">
   import {
+    estimateNotes,
     investmentGainsSeries,
     investmentSeries,
     memoized,
-    money,
     stackAccountsByMonth,
     type Granularity,
     type InvestmentAccountSeries,
@@ -59,6 +59,8 @@
       split === 'group' && groupOf ? (a: InvestmentAccountSeries) => groupOf(a.account_id) : undefined;
     return stackedMonthsOption(stackAccountsByMonth(accounts, byGroup), view === 'gains' ? 'Total gains' : 'Total value');
   });
+  // Shown collapsed: with many accounts the notes run long, and they are reference, not headline.
+  const notes = $derived(estimateNotes(accounts));
   const noFlowsReported = $derived(
     accounts.filter((a) => payload.investments.find((i) => i.account_id === a.account_id)?.flows.length === 0),
   );
@@ -124,24 +126,14 @@
         Dashed = estimated from transactions and public prices; solid = values reported by your institution.
       </p>
     {/if}
-    <ul class="notes">
-      {#each accounts as account (account.account_id)}
-        {#if account.meta}
-          {#if account.meta.status === 'downloading'}
-            <li>{account.label}: Investment history is still downloading.</li>
-          {/if}
-          {#if account.meta.excluded_count > 0}
-            <li>
-              {account.label}: Estimate excludes {account.meta.excluded_count}
-              {account.meta.excluded_count === 1 ? 'holding' : 'holdings'} ({money(account.meta.excluded_value)} of today's value).
-            </li>
-          {/if}
-          {#each account.meta.warnings as warning}
-            <li>{account.label}: {warning}</li>
-          {/each}
-        {/if}
-      {/each}
-    </ul>
+    {#if notes.length > 0}
+      <details class="notes">
+        <summary>Notes on the estimates ({notes.length})</summary>
+        <ul>
+          {#each notes as note}<li>{note}</li>{/each}
+        </ul>
+      </details>
+    {/if}
 
     {#if showHoldings}
       <HoldingsList {payload} {accounts} />
@@ -154,6 +146,16 @@
     justify-content: space-between;
   }
   .notes {
+    margin: 8px 0;
+  }
+  .notes summary {
+    cursor: pointer;
+    color: var(--muted);
+    min-height: 32px;
+    display: list-item;
+  }
+  .notes ul {
     padding-left: 20px;
+    margin: 4px 0 0;
   }
 </style>

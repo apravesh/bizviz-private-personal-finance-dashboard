@@ -61,3 +61,25 @@ describe('Investments tab', () => {
     expect(document.querySelector('section table')).not.toBeNull();
   });
 });
+
+describe('estimate notes', () => {
+  it('start collapsed behind a summary with a count, and expand on demand', () => {
+    const payload = makePayload();
+    payload.investments[0].estimate_meta!.warnings = ['first warning', 'second warning'];
+    payload.data_version = 9001; // charts are memoized by data version
+    mounted = mount(InvestmentsSection, { target: document.body, props: { payload } });
+    flushSync();
+    const details = document.querySelector('details.notes') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(details.querySelector('summary')?.textContent).toBe('Notes on the estimates (2)');
+    expect(details.querySelectorAll('li')).toHaveLength(2);
+    details.querySelector('summary')!.click();
+    expect(details.open).toBe(true);
+  });
+
+  it('are not shown when there are none', () => {
+    mounted = mount(InvestmentsSection, { target: document.body, props: { payload: makePayload() } });
+    flushSync();
+    expect(document.querySelector('details.notes')).toBeNull();
+  });
+});
