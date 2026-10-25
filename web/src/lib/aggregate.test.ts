@@ -14,9 +14,11 @@ import {
   recurringList,
   scopeClass,
   seriesTransactions,
+  sliceFilters,
   spendingByCategory,
 } from './aggregate';
 import { makePayload, TODAY, tx } from './__fixtures__/payload';
+import { EMPTY_FILTERS, filterTransactions, flowTotal } from './txfilter';
 
 describe('scopeClass', () => {
   it('returns the class for the active scope', () => {
@@ -261,6 +263,33 @@ describe('spendingByCategory', () => {
     expect(r.slices[0].value).toBe(120);
     expect(r.slices[9]).toEqual({ key: 'other', label: 'Other', value: 60 });
     expect(r.total).toBe(780);
+  });
+});
+
+describe('sliceFilters', () => {
+  it('uses a month range, or a single month, and the slice category', () => {
+    const r = spendingByCategory(makePayload(), 'mine', 'last-12', TODAY);
+    expect(sliceFilters(r, 'dining')).toEqual({ flow: 'spending', from: '2026-08', to: '2026-09', category: 'dining' });
+    const one = spendingByCategory(makePayload(), 'mine', 'last-month', TODAY);
+    expect(sliceFilters(one, 'groceries')).toEqual({ flow: 'spending', month: '2026-09', category: 'groceries' });
+  });
+
+  it('lists exactly the transactions behind each slice, Other included', () => {
+    const p = makePayload();
+    p.transactions = [];
+    for (let i = 1; i <= 12; i++) {
+      for (const day of ['2026-08-02', '2026-09-02']) {
+        p.transactions.push(
+          tx(`c${i}-${day}`, day, i * 10, { mine: { flow: 'spending', category_id: `cat${i}`, recurring: false } }),
+        );
+      }
+    }
+    const r = spendingByCategory(p, 'mine', 'last-12', TODAY);
+    expect(r.otherKeys).toEqual(['cat3', 'cat2', 'cat1']);
+    for (const slice of r.slices) {
+      const list = filterTransactions(p, 'mine', { ...EMPTY_FILTERS, ...sliceFilters(r, slice.key) });
+      expect(flowTotal(list, 'spending')).toBe(slice.value);
+    }
   });
 });
 

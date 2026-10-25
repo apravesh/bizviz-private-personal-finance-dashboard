@@ -198,6 +198,7 @@ export function categoryPieOption(breakdown: CategoryBreakdown): EChartsCoreOpti
         radius: ['35%', '68%'],
         center: ['50%', '45%'],
         avoidLabelOverlap: true,
+        cursor: 'pointer',
         label: { formatter: '{b}\n{d}%' },
         data: breakdown.slices.map((s) => ({ id: s.key, name: s.label, value: s.value })),
       },

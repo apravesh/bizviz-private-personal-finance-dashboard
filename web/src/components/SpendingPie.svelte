@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { currentMonth, memoized, money, spendingByCategory, type PiePeriod } from '../lib/aggregate';
+  import { currentMonth, memoized, money, sliceFilters, spendingByCategory, type PiePeriod } from '../lib/aggregate';
   import { categoryPieOption } from '../lib/chartOptions';
   import { monthLabel } from '../lib/format';
   import { store } from '../lib/store';
+  import { transactionsHref } from '../lib/txfilter';
   import type { DataPayload } from '../lib/types';
   import Chart from './Chart.svelte';
 
@@ -32,6 +33,11 @@
         ? monthLabel(breakdown.from)
         : `${monthLabel(breakdown.from)} – ${monthLabel(breakdown.to!)}`,
   );
+
+  function openSlice(params: { data?: unknown }): void {
+    const id = (params.data as { id?: string } | undefined)?.id;
+    if (id) location.hash = transactionsHref(sliceFilters(breakdown, id));
+  }
 </script>
 
 <div class="pie">
@@ -50,7 +56,8 @@
     <p class="muted">
       {range}{breakdown.includesInProgress ? ' (current month in progress)' : ''}: {money(breakdown.total)} total.
     </p>
-    <Chart {option} label="Spending by category, {range}" height={360} />
+    <Chart {option} label="Spending by category, {range}" height={360} onclick={openSlice} />
+    <p class="muted">Click a category to see its transactions.</p>
   {/if}
   {#if breakdown.netRefundCategories.length > 0}
     <p class="muted">

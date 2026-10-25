@@ -7,7 +7,7 @@
     option: EChartsCoreOption;
     label: string;
     height?: number;
-    onclick?: (params: { seriesId?: string; name?: string; value?: unknown }) => void;
+    onclick?: (params: { seriesId?: string; name?: string; value?: unknown; data?: unknown }) => void;
   }
 
   let { option, label, height = 320, onclick }: Props = $props();

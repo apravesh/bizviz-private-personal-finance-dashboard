@@ -274,6 +274,8 @@ export interface CategoryBreakdown {
   includesInProgress: boolean;
   /** Categories left out because refunds made their net spending zero or negative. */
   netRefundCategories: string[];
+  /** Category ids folded into the "Other" slice. */
+  otherKeys: string[];
 }
 
 const PIE_TOP = 9;
@@ -310,8 +312,10 @@ export function spendingByCategory(
   }));
   const positive = sums.filter((s) => s.value > 0).sort((a, b) => b.value - a.value || a.key.localeCompare(b.key));
   let slices = positive;
+  let otherKeys: string[] = [];
   if (positive.length > PIE_TOP + 1) {
     const rest = positive.slice(PIE_TOP);
+    otherKeys = rest.map((s) => s.key);
     slices = [
       ...positive.slice(0, PIE_TOP),
       { key: OTHER_KEY, label: 'Other', value: round2(rest.reduce((sum, s) => sum + s.value, 0)) },
@@ -325,7 +329,23 @@ export function spendingByCategory(
     to: covered.at(-1) ?? null,
     includesInProgress: chosen.has(result.inProgress),
     netRefundCategories: sums.filter((s) => s.value < 0).map((s) => s.label),
+    otherKeys,
   };
+}
+
+/** The Transactions filters that list exactly the spending behind one pie slice. */
+export function sliceFilters(
+  breakdown: CategoryBreakdown,
+  sliceKey: string,
+): { flow: string; month?: string; from?: string; to?: string; category?: string; categories?: string[] } {
+  const period =
+    breakdown.from === null
+      ? {}
+      : breakdown.from === breakdown.to
+        ? { month: breakdown.from }
+        : { from: breakdown.from, to: breakdown.to ?? undefined };
+  const categories = sliceKey === OTHER_KEY ? { categories: breakdown.otherKeys } : { category: sliceKey };
+  return { flow: 'spending', ...period, ...categories };
 }
 
 export function seriesTransactions(
