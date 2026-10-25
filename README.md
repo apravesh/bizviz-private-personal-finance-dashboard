@@ -109,7 +109,7 @@ BizViz is reachable on home Wi-Fi only. If you want the phone app away from home
 ## How the numbers work
 
 - Transfers between your own accounts are excluded, so moving money is not counted as earning or spending. That includes moves to and from a joint account, and transfers Plaid labels as between accounts even when the other account is not linked. Payments through apps such as Zelle or Venmo still count, since they usually go to or come from other people; mark any of them as Transfer in **Transactions** if they are your own.
-- Credit card payments are not double counted: the purchases count when made, the payment to the card does not.
+- Credit card payments are not double counted: the purchases count when made, the payment to the card does not. The Spending card's **Credit card bills per month** chart follows the same rule: purchases on each linked card, plus payments to cards that are not linked.
 - Loan and mortgage payments count as spending.
 - Refunds reduce spending.
 - Pending charges are included and marked as pending.

@@ -65,7 +65,7 @@ function monthAxis(months: string[], inProgress: string): object {
 export function barTooltipHtml(
   result: MonthlyResult,
   index: number,
-  noun: 'Spending' | 'Earnings',
+  noun: string,
   marker: (seriesKey: string) => string = () => '',
 ): string {
   const month = result.months[index];
@@ -84,7 +84,7 @@ export function barTooltipHtml(
   return lines.join('<br/>');
 }
 
-export function barOption(result: MonthlyResult, noun: 'Spending' | 'Earnings', stacked: boolean): EChartsCoreOption {
+export function barOption(result: MonthlyResult, noun: string, stacked: boolean): EChartsCoreOption {
   const n = result.months.length;
   const multi = result.series.length > 1;
   return {

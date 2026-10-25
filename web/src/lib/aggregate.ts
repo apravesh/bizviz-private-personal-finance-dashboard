@@ -236,6 +236,68 @@ export function monthlyEarnings(
   return compute(payload, scope, 'earning', split, today).result;
 }
 
+export const UNLINKED_CARD_PAYMENT = 'sys:cc_unlinked';
+const UNLINKED_KEY = 'unlinked-cards';
+
+/**
+ * Monthly credit card bills: spending charged to each linked card (refunds reduce it), plus
+ * payments to cards that are not linked, where the payment is the only record of that spending.
+ * Payments to linked cards are transfers and are left out, so nothing is counted twice.
+ */
+export function monthlyCardBills(payload: DataPayload, scope: Scope, today: Today): MonthlyResult {
+  const months = monthsAxis(payload, today);
+  const monthIndex = new Map(months.map((m, i) => [m, i]));
+  const accounts = new Map(payload.accounts.map((a) => [a.account_id, a]));
+  const layers = new Map<string, { label: string; values: number[]; total: number }>();
+  const pending = months.map(() => 0);
+  for (const tx of payload.transactions) {
+    const cls = scopeClass(tx, scope);
+    if (!cls || cls.flow !== 'spending') continue;
+    const index = monthIndex.get(tx.date.slice(0, 7));
+    if (index === undefined) continue;
+    const account = accounts.get(tx.account_id);
+    let key: string;
+    let label: string;
+    if (account?.type === 'credit') {
+      key = tx.account_id;
+      label = accountLabel(account, tx.account_id);
+    } else if (cls.category_id === UNLINKED_CARD_PAYMENT) {
+      key = UNLINKED_KEY;
+      label = 'Payments to unlinked cards';
+    } else {
+      continue;
+    }
+    const layer = layers.get(key) ?? { label, values: months.map(() => 0), total: 0 };
+    layer.values[index] += tx.amount;
+    layer.total += tx.amount;
+    layers.set(key, layer);
+    if (tx.pending) pending[index] += tx.amount;
+  }
+  const keys = [...layers.keys()]
+    .filter((k) => k !== UNLINKED_KEY)
+    .sort((a, b) => layers.get(b)!.total - layers.get(a)!.total || a.localeCompare(b));
+  if (layers.has(UNLINKED_KEY)) keys.push(UNLINKED_KEY);
+  const series = keys.map((key) => ({
+    key,
+    label: layers.get(key)!.label,
+    values: layers.get(key)!.values.map(round2),
+  }));
+  return {
+    months,
+    inProgress: currentMonth(today),
+    series,
+    pendingByMonth: pending.map(round2),
+    totals: months.map((_, i) => round2(series.reduce((sum, s) => sum + s.values[i], 0))),
+  };
+}
+
+/** The Transactions filters behind one bar segment of the card-bills chart. */
+export function cardBillFilters(seriesKey: string, month: string): { flow: string; month: string; account?: string; category?: string } {
+  return seriesKey === UNLINKED_KEY
+    ? { flow: 'spending', month, category: UNLINKED_CARD_PAYMENT }
+    : { flow: 'spending', month, account: seriesKey };
+}
+
 export interface SavingsResult {
   months: string[];
   inProgress: string;
