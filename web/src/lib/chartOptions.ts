@@ -175,7 +175,7 @@ export function pieTooltipHtml(slice: CategorySlice, total: number): string {
   return `<strong>${escapeHtml(slice.label)}</strong><br/>${money(slice.value)} (${share}%)`;
 }
 
-export function categoryPieOption(breakdown: CategoryBreakdown): EChartsCoreOption {
+export function categoryPieOption(breakdown: Pick<CategoryBreakdown, 'slices' | 'total'>): EChartsCoreOption {
   const byKey = new Map(breakdown.slices.map((s) => [s.key, s]));
   return {
     color: PALETTE,
@@ -266,11 +266,19 @@ export function investmentOption(accounts: InvestmentAccountSeries[]): EChartsCo
   };
 }
 
+export const NET_WORTH_COLORS = {
+  retirement: '#2a9d6f',
+  otherAssets: '#2f6fdd',
+  debts: '#d64550',
+  net: '#1b2230',
+};
+
 export function netWorthTooltipHtml(point: NetWorthSeriesPoint): string {
   const lines = [
     `<strong>${escapeHtml(point.date)}</strong>`,
-    `Net worth: ${money(point.net)}`,
-    `Assets: ${money(point.assets)}`,
+    `<strong>Net worth: ${money(point.net)}</strong>`,
+    `Retirement &amp; tax-advantaged: ${money(point.retirement)}`,
+    `Other assets: ${money(point.otherAssets)}`,
     `Debts: ${money(point.debts)}`,
   ];
   if (point.stale_accounts > 0) {
@@ -281,15 +289,26 @@ export function netWorthTooltipHtml(point: NetWorthSeriesPoint): string {
   return lines.join('<br/>');
 }
 
+/** Stacked bars of retirement and other assets above zero, debts below, and net worth as a line. */
 export function netWorthOption(points: NetWorthSeriesPoint[]): EChartsCoreOption {
   const byDate = new Map(points.map((p) => [p.date, p]));
+  const bar = (id: keyof typeof NET_WORTH_COLORS, name: string, stack: string, value: (p: NetWorthSeriesPoint) => number) => ({
+    id,
+    name,
+    type: 'bar',
+    stack,
+    barMaxWidth: 18,
+    itemStyle: { color: NET_WORTH_COLORS[id] },
+    data: points.map((p) => [p.date, value(p)]),
+  });
   return {
-    color: PALETTE,
     animation: false,
-    grid: { left: 8, right: 16, top: 24, bottom: 56, containLabel: true },
-    legend: { show: false },
+    aria: { enabled: true, decal: { show: false } },
+    grid: { left: 8, right: 16, top: 40, bottom: 56, containLabel: true },
+    legend: { top: 0 },
     tooltip: {
       trigger: 'axis',
+      axisPointer: { type: 'shadow' },
       confine: true,
       formatter: (params: unknown) => {
         const list = params as { value: [string, number] }[];
@@ -298,19 +317,24 @@ export function netWorthOption(points: NetWorthSeriesPoint[]): EChartsCoreOption
       },
     },
     xAxis: { type: 'time' },
-    yAxis: { type: 'value', scale: true, axisLabel: { formatter: (v: number) => moneyAxis(v) } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => moneyAxis(v) } },
     dataZoom: [
       { type: 'inside' },
       { type: 'slider', height: 24, bottom: 8 },
     ],
     series: [
+      bar('retirement', 'Retirement & tax-advantaged', 'assets', (p) => p.retirement),
+      bar('otherAssets', 'Other assets', 'assets', (p) => p.otherAssets),
+      bar('debts', 'Debts', 'debts', (p) => -p.debts),
       {
         id: 'net',
         name: 'Net worth',
         type: 'line',
         showSymbol: points.length < 40,
         connectNulls: false,
-        lineStyle: { width: 2 },
+        itemStyle: { color: NET_WORTH_COLORS.net },
+        lineStyle: { width: 2, color: NET_WORTH_COLORS.net },
+        z: 3,
         data: points.map((p) => [p.date, p.net]),
       },
     ],

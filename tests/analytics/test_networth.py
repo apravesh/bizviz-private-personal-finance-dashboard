@@ -27,8 +27,18 @@ def test_assets_minus_debts_and_series_dates(db: Connection, world: World) -> No
     assert nw["starts_on"] == "2026-10-10"
     assert [p["date"] for p in nw["series"]] == ["2026-10-10", "2026-10-12"]
     p10, p12 = nw["series"]
-    assert p10["household"] == {"assets": 1000 + 9000, "debts": 0, "stale_accounts": 0}
-    assert p12["household"] == {"assets": 1200 + 10000, "debts": 5300, "stale_accounts": 0}
+    assert p10["household"] == {
+        "assets": 1000 + 9000,
+        "debts": 0,
+        "stale_accounts": 0,
+        "retirement": 0,
+    }
+    assert p12["household"] == {
+        "assets": 1200 + 10000,
+        "debts": 5300,
+        "stale_accounts": 0,
+        "retirement": 0,
+    }
     assert p12["mine"] == p12["household"]
 
 
@@ -48,7 +58,7 @@ def test_negative_credit_balance_becomes_asset(db: Connection, world: World) -> 
     snap(db, world.chk, "2026-10-10", 100)
     snap(db, world.cc, "2026-10-10", -25.5)
     p = point(compute_net_worth(db, TODAY), "2026-10-10")["household"]
-    assert p == {"assets": 125.5, "debts": 0, "stale_accounts": 0}
+    assert p == {"assets": 125.5, "debts": 0, "stale_accounts": 0, "retirement": 0}
 
 
 def test_null_snapshot_ignored(db: Connection, world: World) -> None:
@@ -114,3 +124,27 @@ def test_investment_stale_after_five_days(db: Connection, world: World) -> None:
     nw = compute_net_worth(db, TODAY)
     stale = {p["date"]: p["household"]["stale_accounts"] for p in nw["series"]}
     assert stale == {"2026-10-06": 0, "2026-10-07": 1}
+
+
+def test_retirement_is_the_part_of_assets_in_tax_advantaged_accounts(
+    db: Connection, world: World
+) -> None:
+    f.make_account(db, "k401", "item-brk", "investment", "401k")
+    f.make_account(db, "roth", "item-brk", "investment", "Roth")
+    f.make_account(db, "hsa", "item-bank", "depository", "hsa")
+    f.make_account(db, "joint-ira", "item-brk", "investment", "ira", ownership="joint")
+    snap(db, world.chk, "2026-10-10", 1000)
+    snap(db, world.brokerage, "2026-10-10", 5000)
+    snap(db, "k401", "2026-10-10", 20000)
+    snap(db, "roth", "2026-10-10", 7000)
+    snap(db, "hsa", "2026-10-10", 3000)
+    snap(db, "joint-ira", "2026-10-10", 4000)
+    snap(db, world.cc, "2026-10-10", 500)
+    p = point(compute_net_worth(db, TODAY), "2026-10-10")
+    assert p["mine"] == {
+        "assets": 1000 + 5000 + 20000 + 7000 + 3000,
+        "debts": 500,
+        "stale_accounts": 0,
+        "retirement": 20000 + 7000 + 3000,
+    }
+    assert p["household"]["retirement"] == 20000 + 7000 + 3000 + 4000

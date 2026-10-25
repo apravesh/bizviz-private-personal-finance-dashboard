@@ -4,6 +4,7 @@ from typing import Any
 
 from bizviz.analytics.classify import compute_quality
 from bizviz.analytics.networth import compute_net_worth, eligible_accounts
+from bizviz.analytics.tax import tax_group
 from bizviz.analytics.transfers import INV_CASH_MOVEMENT_SQL
 from bizviz.api.schema import (
     AccountOut,
@@ -50,6 +51,7 @@ def _account_out(r: Any) -> AccountOut:
         "removed": r["removed_at"] is not None,
         "duplicate_of_account": r["duplicate_of_account"],
         "superseded_by": r["superseded_by"],
+        "tax_group": tax_group(r["subtype"]),
     }
 
 
@@ -238,10 +240,13 @@ def _investments(conn: Connection) -> list[InvestmentOut]:
                 "price": r["institution_price"],
                 "value": r["institution_value"],
                 "price_as_of": r["institution_price_as_of"],
+                "security_type": r["type"],
+                "is_cash_equivalent": bool(r["is_cash_equivalent"]),
             }
             for r in conn.execute(
-                "SELECT s.name, s.ticker_symbol, h.quantity, h.institution_price,"
-                " h.institution_value, h.institution_price_as_of FROM holdings_snapshots h"
+                "SELECT s.name, s.ticker_symbol, s.type, s.is_cash_equivalent, h.quantity,"
+                " h.institution_price, h.institution_value, h.institution_price_as_of"
+                " FROM holdings_snapshots h"
                 " LEFT JOIN securities s ON s.security_id = h.security_id"
                 " WHERE h.account_id = ? AND h.date = (SELECT MAX(date) FROM holdings_snapshots"
                 " WHERE account_id = ?) ORDER BY h.institution_value IS NULL,"

@@ -13,48 +13,13 @@ export const TAX_GROUP_LABELS: Record<TaxGroup, string> = {
 
 const GROUP_ORDER: TaxGroup[] = ['pre-tax', 'roth', 'health', 'education', 'other'];
 
-// Plaid account subtypes (lowercased) with a tax advantage. Plans whose treatment the subtype
-// does not say (a generic "retirement" account, pensions) go under "other".
-const SUBTYPE_GROUPS: Record<string, TaxGroup> = {
-  '401a': 'pre-tax',
-  '401k': 'pre-tax',
-  '403b': 'pre-tax',
-  '457b': 'pre-tax',
-  ira: 'pre-tax',
-  'sep ira': 'pre-tax',
-  sarsep: 'pre-tax',
-  'simple ira': 'pre-tax',
-  keogh: 'pre-tax',
-  'thrift savings plan': 'pre-tax',
-  rrsp: 'pre-tax',
-  rrif: 'pre-tax',
-  lira: 'pre-tax',
-  lrsp: 'pre-tax',
-  lif: 'pre-tax',
-  lrif: 'pre-tax',
-  rlif: 'pre-tax',
-  prif: 'pre-tax',
-  sipp: 'pre-tax',
-  roth: 'roth',
-  'roth 401k': 'roth',
-  tfsa: 'roth',
-  isa: 'roth',
-  'cash isa': 'roth',
-  hsa: 'health',
-  '529': 'education',
-  'education savings account': 'education',
-  resp: 'education',
-  pension: 'other',
-  retirement: 'other',
-  'profit sharing plan': 'other',
-  rdsp: 'other',
-};
-
-export function taxGroup(account: Pick<AccountOut, 'subtype'>): TaxGroup | null {
-  return SUBTYPE_GROUPS[(account.subtype ?? '').trim().toLowerCase()] ?? null;
+/** The account's tax-advantaged group, decided on the Mac from its Plaid subtype. */
+export function taxGroup(account: Pick<AccountOut, 'tax_group'>): TaxGroup | null {
+  const group = account.tax_group;
+  return group !== null && Object.hasOwn(TAX_GROUP_LABELS, group) ? (group as TaxGroup) : null;
 }
 
-export function isTaxAdvantaged(account: Pick<AccountOut, 'subtype'>): boolean {
+export function isTaxAdvantaged(account: Pick<AccountOut, 'tax_group'>): boolean {
   return taxGroup(account) !== null;
 }
 

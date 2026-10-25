@@ -34,6 +34,8 @@ class AccountOut(TypedDict):
     removed: bool
     duplicate_of_account: str | None
     superseded_by: str | None
+    # pre-tax, roth, health, education or other for tax-advantaged accounts; None otherwise.
+    tax_group: str | None
 
 
 class CategoryOut(TypedDict):
@@ -101,6 +103,9 @@ class HoldingOut(TypedDict):
     price: float | None
     value: float | None
     price_as_of: str | None
+    # Plaid's security type: equity, etf, mutual fund, cash, fixed income, cryptocurrency, ...
+    security_type: str | None
+    is_cash_equivalent: bool
 
 
 class EstimateMetaOut(TypedDict):
@@ -127,6 +132,8 @@ class NetWorthScope(TypedDict):
     assets: float
     debts: float
     stale_accounts: int
+    # The part of assets held in retirement and other tax-advantaged accounts.
+    retirement: float
 
 
 class NetWorthPoint(TypedDict):

@@ -21,6 +21,7 @@ export function account(over: Partial<AccountOut> & { account_id: string }): Acc
     removed: false,
     duplicate_of_account: null,
     superseded_by: null,
+    tax_group: null,
     ...over,
   };
 }
@@ -139,6 +140,7 @@ export function makePayload(): DataPayload {
         type: 'investment',
         subtype: 'ira',
         ownership: 'joint',
+        tax_group: 'pre-tax',
       }),
     ],
     categories: [
@@ -195,6 +197,8 @@ export function makePayload(): DataPayload {
             price: 60,
             value: 120,
             price_as_of: '2026-10-02',
+            security_type: 'etf',
+            is_cash_equivalent: false,
           },
         ],
         flows: [['2026-10-01', 5]],
@@ -214,23 +218,23 @@ export function makePayload(): DataPayload {
       series: [
         {
           date: '2026-09-28',
-          mine: { assets: 800, debts: 300, stale_accounts: 0 },
-          household: { assets: 1800, debts: 300, stale_accounts: 0 },
+          mine: { assets: 800, debts: 300, stale_accounts: 0, retirement: 200 },
+          household: { assets: 1800, debts: 300, stale_accounts: 0, retirement: 700 },
         },
         {
           date: '2026-10-01',
-          mine: { assets: 1000, debts: 200, stale_accounts: 0 },
-          household: { assets: 2000, debts: 200, stale_accounts: 1 },
+          mine: { assets: 1000, debts: 200, stale_accounts: 0, retirement: 300 },
+          household: { assets: 2000, debts: 200, stale_accounts: 1, retirement: 800 },
         },
         {
           date: '2026-10-02',
-          mine: { assets: 1200, debts: 100, stale_accounts: 2 },
-          household: { assets: 2200, debts: 100, stale_accounts: 0 },
+          mine: { assets: 1200, debts: 100, stale_accounts: 2, retirement: 300 },
+          household: { assets: 2200, debts: 100, stale_accounts: 0, retirement: 800 },
         },
         {
           date: '2026-10-03',
-          mine: { assets: 1400, debts: 0, stale_accounts: 0 },
-          household: { assets: 2400, debts: 0, stale_accounts: 0 },
+          mine: { assets: 1400, debts: 0, stale_accounts: 0, retirement: 400 },
+          household: { assets: 2400, debts: 0, stale_accounts: 0, retirement: 900 },
         },
       ],
     },

@@ -92,7 +92,7 @@ Some details that matter:
 - A rule for a merchant that says "Earning" applies only to money in; Spending, Transfer and Ignore apply both ways.
 - Unmatched card payments at an institution that has a linked card are still counted but flagged for review, since they could be double counting.
 - Recurring charges are detected per scope from spending transactions: at least 3 occurrences (2 for annual), a steady cadence (weekly, biweekly, monthly, quarterly, annual) and similar amounts. No "next expected" date is shown, because that would be a forecast.
-- Net worth is actual balances only: assets (bank, investment) minus debts (cards, loans). An account stops contributing when its connection is removed or Plaid stops reporting it. Points carry a count of accounts whose balance is stale. History starts when accounts are linked.
+- Net worth is actual balances only: assets (bank, investment) minus debts (cards, loans). Each point also carries the part of assets held in tax-advantaged accounts (from the Plaid subtype, `analytics/tax.py`). An account stops contributing when its connection is removed or Plaid stops reporting it. Points carry a count of accounts whose balance is stale. History starts when accounts are linked.
 
 ## Investment estimation
 

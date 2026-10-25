@@ -40,6 +40,10 @@ export interface NetWorthSeriesPoint {
   debts: number;
   net: number;
   stale_accounts: number;
+  /** Assets in retirement and other tax-advantaged accounts. */
+  retirement: number;
+  /** All other assets: cash and taxable investments. */
+  otherAssets: number;
 }
 
 export interface NetWorthResult {
@@ -496,6 +500,8 @@ export function netWorthSeries(
       debts: s.debts,
       net: round2(s.assets - s.debts),
       stale_accounts: s.stale_accounts,
+      retirement: s.retirement,
+      otherAssets: round2(s.assets - s.retirement),
     };
   });
   let points = daily;
@@ -516,6 +522,8 @@ export function netWorthSeries(
           debts: mean((p) => p.debts),
           net: mean((p) => p.net),
           stale_accounts: Math.max(...group.map((p) => p.stale_accounts)),
+          retirement: mean((p) => p.retirement),
+          otherAssets: mean((p) => p.otherAssets),
         };
       });
   }
