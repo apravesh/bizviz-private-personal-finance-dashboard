@@ -47,12 +47,12 @@ def make_runtime(ctx: AppContext) -> Runtime:
     )
 
 
-def build_runtime(env: Env, *, demo: bool = False) -> Runtime:
+def build_runtime(env: Env, profile: str | None = None, *, demo: bool = False) -> Runtime:
     if demo:
         from bizviz.demo import build_demo_runtime
 
         return build_demo_runtime()
-    cfg = load_config(env)
+    cfg = load_config(env, profile)
     configure_logging(cfg)
     platform = get_platform(cfg)
     db_key = platform.secrets.get(KC_DB_KEY)

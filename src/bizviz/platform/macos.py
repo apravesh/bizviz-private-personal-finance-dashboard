@@ -41,8 +41,9 @@ class KeyringSecretStore:
 
 
 class LaunchdServiceManager:
-    def __init__(self, label: str = LAUNCH_AGENT_LABEL) -> None:
+    def __init__(self, label: str = LAUNCH_AGENT_LABEL, profile: str | None = None) -> None:
         self.label = label
+        self.profile = profile
 
     @property
     def plist_path(self) -> Path:
@@ -59,7 +60,13 @@ class LaunchdServiceManager:
     def install(self, python_path: Path, repo_dir: Path, log_dir: Path) -> None:
         plist = {
             "Label": self.label,
-            "ProgramArguments": [str(python_path), "-m", "bizviz", "serve"],
+            "ProgramArguments": [
+                str(python_path),
+                "-m",
+                "bizviz",
+                *(["--profile", self.profile] if self.profile else []),
+                "serve",
+            ],
             "WorkingDirectory": str(repo_dir),
             "RunAtLoad": True,
             "KeepAlive": True,

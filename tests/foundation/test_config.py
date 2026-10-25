@@ -3,7 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from bizviz.config import PORT_PRODUCTION, PORT_SANDBOX, load_config, replace_config, save_config
+from bizviz.config import (
+    PORT_PRODUCTION,
+    PORT_SANDBOX,
+    InvalidProfileError,
+    load_config,
+    other_profile_ports,
+    replace_config,
+    save_config,
+)
 
 
 def test_defaults_without_bizviz_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -78,3 +86,62 @@ def test_hostname_omitted_when_none_and_plaid_env_ignored_from_file() -> None:
     assert "\nhostname" not in "\n" + cfg.config_toml_path.read_text()
     cfg.config_toml_path.write_text('plaid_env = "sandbox"\n')
     assert load_config("production").plaid_env == "production"
+
+
+def test_named_profile_is_separate_everywhere(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("BIZVIZ_HOME")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    default = load_config("production")
+    wife = load_config("production", "wife")
+    support = tmp_path / "Library" / "Application Support"
+    assert wife.home == support / "BizViz-wife"
+    assert wife.log_dir == tmp_path / "Library" / "Logs" / "BizViz-wife"
+    assert wife.keychain_service == "BizViz-wife"
+    assert wife.launch_agent_label == "com.bizviz.agent.wife"
+    assert wife.session_cookie == "bv_session_wife"
+    assert wife.profile == "wife" and default.profile is None
+    assert (default.launch_agent_label, default.session_cookie) == (
+        "com.bizviz.agent",
+        "bv_session",
+    )
+    assert not wife.port_configured and default.port_configured
+    sandbox = load_config("sandbox", "wife")
+    assert sandbox.home == support / "BizViz-wife-sandbox"
+    assert sandbox.keychain_service == "BizViz-wife-sandbox"
+    assert sandbox.session_cookie == "bv_session_wife_sandbox"
+    assert load_config("sandbox").session_cookie == "bv_session_sandbox"
+    assert load_config("production", "my-mom").session_cookie == "bv_session_my_mom"
+
+
+@pytest.mark.parametrize("name", ["Wife", "1abc", "a b", "../x", "", "sandbox", "demo", "x" * 33])
+def test_invalid_profile_names(name: str) -> None:
+    with pytest.raises(InvalidProfileError):
+        load_config("production", name)
+
+
+def test_named_profile_port_comes_from_its_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("BIZVIZ_HOME")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    save_config(replace_config(load_config("production", "wife"), port=8446))
+    wife = load_config("production", "wife")
+    assert wife.port == 8446 and wife.port_configured
+
+
+def test_other_profile_ports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("BIZVIZ_HOME")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    default = load_config("production")
+    save_config(replace_config(load_config("production", "wife"), port=8446))
+    load_config("sandbox")
+    (default.home.parent / "BizViz-stray").mkdir()  # no config.toml: not an install
+    assert other_profile_ports(default) == {
+        "BizViz-sandbox": 8445,
+        "BizViz-wife": 8446,
+        "demo": 8444,
+    }
+    wife = load_config("production", "wife")
+    assert other_profile_ports(wife) == {"BizViz": 8443, "BizViz-sandbox": 8445, "demo": 8444}

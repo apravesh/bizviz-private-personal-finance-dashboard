@@ -13,7 +13,6 @@ from bizviz.api.deps import (
     require_session,
 )
 from bizviz.auth import (
-    SESSION_COOKIE,
     SESSION_MAX_AGE,
     check_dashboard_password,
     create_session,
@@ -62,16 +61,18 @@ def login(body: LoginBody, request: Request, runtime: RuntimeDep, conn: ConnDep)
     )
     response = Response(status_code=204)
     response.headers.append(
-        "set-cookie", f"{SESSION_COOKIE}={token}; {_COOKIE_FLAGS}; Max-Age={SESSION_MAX_AGE}"
+        "set-cookie",
+        f"{runtime.ctx.cfg.session_cookie}={token}; {_COOKIE_FLAGS}; Max-Age={SESSION_MAX_AGE}",
     )
     return response
 
 
 @router.post("/api/auth/logout", status_code=204)
-def logout(session: SessionDep, conn: ConnDep) -> Response:
+def logout(session: SessionDep, runtime: RuntimeDep, conn: ConnDep) -> Response:
     revoke_session(conn, session.session_id)
     response = Response(status_code=204)
-    response.headers.append("set-cookie", f"{SESSION_COOKIE}=; {_COOKIE_FLAGS}; Max-Age=0")
+    cookie = runtime.ctx.cfg.session_cookie
+    response.headers.append("set-cookie", f"{cookie}=; {_COOKIE_FLAGS}; Max-Age=0")
     return response
 
 

@@ -171,7 +171,10 @@ def test_repo_in_protected_folder_is_refused(
 ) -> None:
     repo = _fake_user_home / folder / "bizviz"
     repo.mkdir(parents=True)
-    monkeypatch.setattr("bizviz.cli.load_config", lambda env: _with_repo(load_config(env), repo))
+    monkeypatch.setattr(
+        "bizviz.cli.load_config",
+        lambda env, profile=None: _with_repo(load_config(env, profile), repo),
+    )
     prompter = ScriptedPrompter()
     assert run_setup(platform, prompter, runner) == cli.EXIT_BAD_LOCATION
     assert folder in capsys.readouterr().err
@@ -213,7 +216,8 @@ def test_npm_failure_restarts_previous_build(
 ) -> None:
     dist = tmp_path / "dist"
     monkeypatch.setattr(
-        "bizviz.cli.load_config", lambda env: _with_web_dist(load_config(env), dist)
+        "bizviz.cli.load_config",
+        lambda env, profile=None: _with_web_dist(load_config(env, profile), dist),
     )
     assert run_setup(platform, fresh_prompter(platform), FakeRunner()) == 0
     dist.mkdir()
@@ -268,3 +272,65 @@ def test_setup_recovers_unknown_tokens_from_keychain_index(
         conn.close()
     assert [(r["item_id"], r["access_token"]) for r in rows] == [("item-x", "access-x")]
     assert tokens.index_read(platform.secrets)
+
+
+def test_named_profile_needs_a_port(
+    platform: Platform, runner: FakeRunner, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = run_setup(platform, ScriptedPrompter(), runner, "--port", "80")
+    assert code == cli.EXIT_ABORTED
+    code = cli.main(
+        ["--profile", "wife", "setup"],
+        prompter=ScriptedPrompter(),
+        runner=runner,
+        platform=platform,
+    )
+    assert code == cli.EXIT_ABORTED
+    err = capsys.readouterr().err
+    assert "between 1024 and 65535" in err
+    assert "bizviz --profile wife setup --port 8446" in err
+    assert service(platform).calls == []
+
+
+def test_named_profile_refuses_a_port_in_use(
+    platform: Platform, runner: FakeRunner, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = cli.main(
+        ["--profile", "wife", "setup", "--port", "8444"],
+        prompter=ScriptedPrompter(),
+        runner=runner,
+        platform=platform,
+    )
+    assert code == cli.EXIT_ABORTED
+    assert "Port 8444 is already used by demo" in capsys.readouterr().err
+
+
+def test_named_profile_setup_keeps_its_own_data_and_port(
+    platform: Platform, runner: FakeRunner, cfg: AppConfig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = cli.main(
+        ["--profile", "wife", "setup", "--port", "8446"],
+        prompter=fresh_prompter(platform),
+        runner=runner,
+        platform=platform,
+    )
+    assert code == 0
+    wife = load_config("production", "wife")
+    assert wife.port == 8446 and wife.home != cfg.home
+    assert wife.db_path.exists() and not cfg.db_path.exists()
+    out = capsys.readouterr().out
+    assert "set up for the 'wife' profile" in out
+    assert "https://localhost:8446" in out
+    # Re-running needs no --port: it is remembered.
+    code = cli.main(
+        ["--profile", "wife", "setup"],
+        prompter=ScriptedPrompter(),
+        runner=runner,
+        platform=platform,
+    )
+    assert code == 0
+
+
+def test_invalid_profile_name_is_reported(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["--profile", "Bad Name", "status"]) == cli.EXIT_ABORTED
+    assert "profile name" in capsys.readouterr().err

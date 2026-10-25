@@ -88,6 +88,20 @@ BizViz downloads up to 24 months of transactions when you link; the 5-year chart
 
 On your home Wi-Fi, install the certificate, add BizViz to your Home Screen and log in there. Step by step: [docs/iphone-setup.md](docs/iphone-setup.md).
 
+## Another person on the same Mac
+
+Someone else in your household can have their own BizViz on the same Mac, with their own dashboard password, recovery phrase, Plaid account and connections, on its own port. It is a separate **profile**:
+
+```sh
+uv run bizviz --profile wife setup --port 8446
+```
+
+A profile has its own data folder (`~/Library/Application Support/BizViz-wife/`), Keychain entries (service `BizViz-wife`), background service (`com.bizviz.agent.wife`), login cookie and certificate (copied to the Desktop as `BizViz-wife-CA.cer`). Open it at `https://localhost:8446`, or `https://<your-mac>.local:8446` from a phone. Add `--profile wife` to any command for that profile, for example `uv run bizviz --profile wife status`. Your own BizViz is the default profile and is unchanged.
+
+- Each profile needs a port that no other profile uses (8443 is the default profile's, 8444 the demo's, 8445 sandbox's); setup refuses a port that is taken.
+- Use a separate Plaid account for the other person: Trial connection slots belong to a Plaid account, so sharing one would split its 10 slots.
+- Both profiles run under your macOS login, so the dashboard passwords keep them apart in the browser, but anyone logged in to the Mac as you can read both profiles' data. For full separation, give the other person their own macOS login and run setup there instead.
+
 ## Away from home
 
 BizViz is reachable on home Wi-Fi only. If you want the phone app away from home, see the optional Tailscale guide: [docs/tailscale.md](docs/tailscale.md). Never forward the port on your router.
@@ -169,6 +183,8 @@ Run these from the repo with `uv run bizviz <command>`.
 | `uninstall --delete-data` | Also delete the data directory (database, backups, certificates, config), the stored database key, Plaid credentials and CA key, and the trusted CA. Asks you to type a confirmation. Keeps the Plaid token mirror so a reinstall can re-adopt your connections. |
 | `uninstall --delete-tokens` | With `--delete-data`, also delete the Plaid token mirror after a second typed confirmation. Your Trial slots cannot be recovered after this. |
 | `--env sandbox` (before any command) | Use Plaid Sandbox with completely separate state. |
+| `--profile <name>` (before any command) | Use a separate BizViz profile on this Mac (see [Another person on the same Mac](#another-person-on-the-same-mac)). |
+| `setup --port <port>` | Set the HTTPS port; required the first time a profile is set up. |
 
 `--env sandbox` uses its own data directory (`~/Library/Application Support/BizViz-sandbox/`), its own Keychain entries (service `BizViz-sandbox`) and port 8445, and installs no background service. Use `uv run bizviz --env sandbox setup`, then `uv run bizviz --env sandbox serve`, and use Plaid's test login `user_good` / `pass_good`. Sandbox connections never count toward your 10 production slots.
 

@@ -2,7 +2,7 @@ import re
 
 from fastapi.testclient import TestClient
 
-from tests.api.conftest import ClientFactory
+from tests.api.conftest import HEADERS, PASSWORD, ClientFactory
 
 PLAID_SCRIPT = "https://cdn.plaid.com/link/v2/stable/link-initialize.js"
 
@@ -130,3 +130,25 @@ def test_errors_use_error_envelope(client: TestClient) -> None:
     body = resp.json()
     assert body["error"]["code"] == "invalid"
     assert isinstance(body["error"]["message"], str)
+
+
+def test_session_cookie_name_follows_the_profile(runtime) -> None:  # type: ignore[no-untyped-def]
+    from dataclasses import replace
+
+    from bizviz.api.app import create_app
+
+    runtime.ctx.cfg = replace(runtime.ctx.cfg, session_cookie="bv_session_wife")
+    c = TestClient(create_app(runtime), base_url="https://testserver", headers=HEADERS)
+    resp = c.post("/api/auth/login", json={"password": PASSWORD})
+    assert resp.status_code == 204
+    assert resp.headers["set-cookie"].startswith("bv_session_wife=")
+    assert c.get("/api/session").status_code == 200
+    # The default profile's cookie name does not sign in to this one.
+    token = c.cookies.get("bv_session_wife")
+    c.cookies.clear()
+    c.cookies.set("bv_session", token)
+    assert c.get("/api/session").status_code == 401
+    c.cookies.clear()
+    c.cookies.set("bv_session_wife", token)
+    logout = c.post("/api/auth/logout")
+    assert logout.headers["set-cookie"].startswith("bv_session_wife=;")
