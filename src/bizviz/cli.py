@@ -36,7 +36,9 @@ from bizviz.config import (
     PORT_DEMO,
     AppConfig,
     Env,
+    InvalidProfileError,
     load_config,
+    other_profile_ports,
     replace_config,
     save_config,
 )
@@ -149,8 +151,12 @@ def _desktop_export_allowed(cfg: AppConfig) -> bool:
     )
 
 
+def ca_desktop_name(cfg: AppConfig) -> str:
+    return f"BizViz-{cfg.profile}-CA.cer" if cfg.profile else CA_DESKTOP_NAME
+
+
 def export_ca_to_desktop(cfg: AppConfig, home: Path) -> Path | None:
-    dest = home / "Desktop" / CA_DESKTOP_NAME
+    dest = home / "Desktop" / ca_desktop_name(cfg)
     try:
         certs.export_ca_for_airdrop(cfg, dest)
     except OSError:
@@ -381,10 +387,36 @@ def _restore_command(cli: _Cli, backup: str, force: bool) -> None:
     print("Restore complete; all dashboard sessions were signed out.")
 
 
+def _choose_port(cli: _Cli, port: int | None) -> None:
+    """Apply `setup --port`, insist on a port for a new named profile, and refuse clashes."""
+    cfg = cli.cfg
+    if port is not None:
+        if not 1024 <= port <= 65535:
+            raise _Abort(EXIT_ABORTED, "Choose a port between 1024 and 65535.")
+        if port != cfg.port or not cfg.port_configured:
+            cfg = replace_config(cfg, port=port, port_configured=True)
+    elif not cfg.port_configured:
+        raise _Abort(
+            EXIT_ABORTED,
+            f"Choose a port for the '{cfg.profile}' profile, for example: "
+            f"bizviz --profile {cfg.profile} setup --port 8446",
+        )
+    for name, used in other_profile_ports(cfg).items():
+        if used == cfg.port:
+            raise _Abort(
+                EXIT_ABORTED,
+                f"Port {cfg.port} is already used by {name}. Choose another with --port.",
+            )
+    if cfg != cli.cfg:
+        save_config(cfg)
+        cli.cfg = cfg
+
+
 def _setup_command(cli: _Cli, args: argparse.Namespace) -> int:
     problem = repo_location_problem(cli.cfg.repo_dir, Path.home())
     if problem:
         raise _Abort(EXIT_BAD_LOCATION, problem)
+    _choose_port(cli, args.port)
     _warn_system(cli)
     if args.recover_key:
         return _recover_key_command(cli)
@@ -411,14 +443,15 @@ def _setup_command(cli: _Cli, args: argparse.Namespace) -> int:
             cfg.repo_dir / ".venv" / "bin" / "python", cfg.repo_dir, cfg.log_dir
         )
     print()
-    print("BizViz is set up.")
+    print(f"BizViz is set up{f' for the {cfg.profile!r} profile' if cfg.profile else ''}.")
     print(f"  This Mac:  https://localhost:{cfg.port}")
     print(f"  Your LAN:  https://{cfg.hostname}:{cfg.port}")
     print("See docs/iphone-setup.md to add it to your iPhone.")
     if cli.production:
         print("macOS may ask whether Python may accept incoming network connections: choose Allow.")
     else:
-        print(f"Sandbox has no background service. Run: bizviz --env {cfg.env} serve")
+        profile_arg = f" --profile {cfg.profile}" if cfg.profile else ""
+        print(f"Sandbox has no background service. Run: bizviz{profile_arg} --env {cfg.env} serve")
     return 0
 
 
@@ -469,8 +502,8 @@ def _serve(rt: Runtime, port: int) -> int:
     return 0
 
 
-def _serve_command(env: Env, port: int | None) -> int:
-    rt = build_runtime(env)
+def _serve_command(env: Env, port: int | None, profile: str | None) -> int:
+    rt = build_runtime(env, profile)
     cfg = rt.ctx.cfg
     if not certs.leaf_path(cfg).exists() or not certs.leaf_key_path(cfg).exists():
         certs.issue_leaf(cfg, rt.ctx.platform.secrets, rt.ctx.now())
@@ -487,6 +520,8 @@ def _demo_command(port: int) -> int:
 
 def _status_command(cli: _Cli) -> int:
     cfg, platform = cli.cfg, cli.platform
+    if cfg.profile:
+        print(f"Profile: {cfg.profile}")
     if cli.production:
         print(f"Service: {'running' if platform.service.is_running() else 'not running'}")
     else:
@@ -642,6 +677,11 @@ def _uninstall_command(cli: _Cli, args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bizviz")
     parser.add_argument("--env", choices=["production", "sandbox"], default="production")
+    parser.add_argument(
+        "--profile",
+        metavar="NAME",
+        help="a separate BizViz on this Mac (its own data, logins, Plaid connections and port)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     setup = sub.add_parser("setup", help="set up or update BizViz (safe to re-run)")
@@ -655,6 +695,7 @@ def _build_parser() -> argparse.ArgumentParser:
     setup.add_argument(
         "--reconfigure-plaid", action="store_true", help="re-enter Plaid credentials"
     )
+    setup.add_argument("--port", type=int, help="the HTTPS port (required for a new profile)")
 
     serve = sub.add_parser("serve", help="run the service (what the LaunchAgent runs)")
     serve.add_argument("--port", type=int)
@@ -696,9 +737,9 @@ def main(
         if args.command == "demo":
             return _demo_command(args.port)
         if args.command == "serve":
-            return _serve_command(env, args.port)
+            return _serve_command(env, args.port, args.profile)
 
-        cfg = load_config(env)
+        cfg = load_config(env, args.profile)
         try:
             resolved = platform or get_platform(cfg)
         except UnsupportedPlatformError as exc:
@@ -724,7 +765,7 @@ def main(
     except _Abort as abort:
         print(abort.message, file=sys.stderr)
         return abort.code
-    except PlatformError as exc:
+    except (PlatformError, InvalidProfileError) as exc:
         print(exc, file=sys.stderr)
         return EXIT_ABORTED
     except SystemExit as exit_:

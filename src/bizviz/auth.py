@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from bizviz.config import SESSION_COOKIE as SESSION_COOKIE
 from bizviz.db.connection import Connection, get_setting, set_setting, write_unit
 
-SESSION_COOKIE = "bv_session"
 SESSION_MAX_AGE = 34560000
 SESSION_LIFETIME = timedelta(days=400)
 SESSION_TOUCH_INTERVAL = timedelta(hours=1)

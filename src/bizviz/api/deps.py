@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from bizviz.auth import SESSION_COOKIE, SessionInfo, validate_session
+from bizviz.auth import SessionInfo, validate_session
 from bizviz.db.connection import Connection
 from bizviz.plaid_types import PlaidClient
 from bizviz.service import Runtime
@@ -41,7 +41,7 @@ ConnDep = Annotated[Connection, Depends(get_conn)]
 
 
 def require_session(request: Request, runtime: RuntimeDep, conn: ConnDep) -> SessionInfo:
-    token = request.cookies.get(SESSION_COOKIE)
+    token = request.cookies.get(runtime.ctx.cfg.session_cookie)
     info = validate_session(conn, token, runtime.ctx.now()) if token else None
     if info is None:
         raise ApiError(401, "unauthorized", "Not signed in")

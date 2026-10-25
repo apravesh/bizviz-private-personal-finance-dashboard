@@ -184,3 +184,24 @@ def test_keyring_store_delete_ignores_missing(monkeypatch: pytest.MonkeyPatch) -
     secrets.delete("a")
     secrets.delete("a")
     assert secrets.get("a") is None
+
+
+def test_launchd_profile_runs_its_own_serve(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    calls = _patch_launchctl(monkeypatch)
+    svc = macos.LaunchdServiceManager("com.bizviz.agent.wife", "wife")
+    svc.install(Path("/repo/.venv/bin/python"), Path("/repo"), Path("/logs"))
+    plist = tmp_path / "Library" / "LaunchAgents" / "com.bizviz.agent.wife.plist"
+    data = plistlib.loads(plist.read_bytes())
+    assert data["Label"] == "com.bizviz.agent.wife"
+    assert data["ProgramArguments"] == [
+        "/repo/.venv/bin/python",
+        "-m",
+        "bizviz",
+        "--profile",
+        "wife",
+        "serve",
+    ]
+    assert calls[0][2].endswith("/com.bizviz.agent.wife")

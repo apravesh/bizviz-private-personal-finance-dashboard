@@ -42,7 +42,7 @@ def get_platform(cfg: AppConfig) -> Platform:
 
         return Platform(
             secrets=KeyringSecretStore(cfg.keychain_service),
-            service=LaunchdServiceManager(),
+            service=LaunchdServiceManager(cfg.launch_agent_label, cfg.profile),
             system=MacSystemStatus(),
             trust=MacTrustStore(),
         )

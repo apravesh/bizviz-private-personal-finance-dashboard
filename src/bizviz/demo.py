@@ -957,7 +957,10 @@ def build_demo_runtime() -> "Runtime":
     home = Path(tempfile.mkdtemp(prefix="bizviz-demo-")) / "data"
     os.environ["BIZVIZ_HOME"] = str(home)
     os.environ["BIZVIZ_PLATFORM"] = "fake"
-    cfg = replace_config(load_config("production"), port=PORT_DEMO)
+    # Its own cookie name, so signing in to the demo does not sign you out of BizViz on localhost.
+    cfg = replace_config(
+        load_config("production"), port=PORT_DEMO, session_cookie="bv_session_demo"
+    )
     configure_logging(cfg, to_stderr=True)
     platform = Platform(
         secrets=FakeSecretStore(None),

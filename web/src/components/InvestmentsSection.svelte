@@ -9,10 +9,10 @@
     type InvestmentAccountSeries,
   } from '../lib/aggregate';
   import { investmentOption, stackedMonthsOption } from '../lib/chartOptions';
-  import { formatDate } from '../lib/format';
   import { store } from '../lib/store';
   import type { DataPayload } from '../lib/types';
   import Chart from './Chart.svelte';
+  import HoldingsList from './HoldingsList.svelte';
 
   interface Props {
     payload: DataPayload;
@@ -25,6 +25,8 @@
     /** With stacked bars, offer a split by these groups (account id -> group) besides by account. */
     groupOf?: (accountId: string) => { key: string; label: string };
     groupLabel?: string;
+    /** List each account's holdings under the chart (the Investments tab shows them separately). */
+    showHoldings?: boolean;
   }
 
   let {
@@ -35,6 +37,7 @@
     stacked = false,
     groupOf,
     groupLabel = 'Group',
+    showHoldings = true,
   }: Props = $props();
 
   let chosenGranularity = $state<Granularity>('daily');
@@ -58,12 +61,6 @@
   });
   const noFlowsReported = $derived(
     accounts.filter((a) => payload.investments.find((i) => i.account_id === a.account_id)?.flows.length === 0),
-  );
-  const holdings = $derived(
-    accounts.map((a) => ({
-      account: a,
-      rows: payload.investments.find((i) => i.account_id === a.account_id)?.holdings ?? [],
-    })),
   );
 </script>
 
@@ -146,35 +143,9 @@
       {/each}
     </ul>
 
-    {#each holdings as { account, rows } (account.account_id)}
-      <h3>{account.label}</h3>
-      {#if rows.length === 0}
-        <p class="muted">No holdings reported.</p>
-      {:else}
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Holding</th><th class="num">Quantity</th><th class="num">Price</th><th class="num">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each rows as row}
-                <tr>
-                  <td>
-                    {row.security_name ?? row.ticker ?? 'Unknown'}{row.ticker && row.security_name ? ` (${row.ticker})` : ''}
-                    {#if row.price_as_of}<div class="muted">price as of {formatDate(row.price_as_of)}</div>{/if}
-                  </td>
-                  <td class="num">{row.quantity.toLocaleString('en-US', { maximumFractionDigits: 6 })}</td>
-                  <td class="num">{row.price === null ? '—' : money(row.price)}</td>
-                  <td class="num">{row.value === null ? '—' : money(row.value)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-    {/each}
+    {#if showHoldings}
+      <HoldingsList {payload} {accounts} />
+    {/if}
   {/if}
 </section>
 
