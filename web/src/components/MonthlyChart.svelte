@@ -19,11 +19,16 @@
     kind: 'spending' | 'earning';
     title: string;
     splits: { value: string; label: string }[];
-    /** Extra content shown inside the card, below the monthly chart. */
+    /** Extra content shown inside the card. */
     children?: Snippet;
+    /**
+     * Card heading when the card holds more than the monthly bars: the extra content then comes
+     * first and the bars last, under `title`.
+     */
+    cardTitle?: string;
   }
 
-  let { payload, kind, title, splits, children }: Props = $props();
+  let { payload, kind, title, splits, children, cardTitle }: Props = $props();
 
   let split = $state('none');
   let drill = $state<{ seriesKey: string; month: string } | null>(null);
@@ -44,22 +49,21 @@
   }
 </script>
 
-<section class="card" aria-labelledby="{kind}-title">
-  <div class="row head">
-    <h2 id="{kind}-title">{title}</h2>
-    <label class="muted">
-      Split by
-      <select bind:value={split} aria-label="Split {title}">
-        {#each splits as s}<option value={s.value}>{s.label}</option>{/each}
-      </select>
-    </label>
-  </div>
+{#snippet splitControl()}
+  <label class="muted">
+    Split by
+    <select bind:value={split} aria-label="Split {title}">
+      {#each splits as s}<option value={s.value}>{s.label}</option>{/each}
+    </select>
+  </label>
+{/snippet}
+
+{#snippet monthlyBars()}
   {#if payload.transactions.length === 0}
     <p class="muted">No transactions yet.</p>
   {/if}
   <Chart {option} label="{title} by month" onclick={openDrill} />
   <p class="muted">Pending transactions are included; the tooltip shows how much of a month is pending.</p>
-  {@render children?.()}
   {#if drill}
     <Drilldown
       {payload}
@@ -72,10 +76,42 @@
       onclose={() => (drill = null)}
     />
   {/if}
-</section>
+{/snippet}
+
+{#if cardTitle}
+  <!-- The card's other charts come first; the monthly bars close it under their own heading. -->
+  <section class="card" aria-labelledby="{kind}-card-title">
+    <h2 id="{kind}-card-title">{cardTitle}</h2>
+    {@render children?.()}
+    <div class="bars">
+      <div class="row head">
+        <h3 id="{kind}-title">{title}</h3>
+        {@render splitControl()}
+      </div>
+      {@render monthlyBars()}
+    </div>
+  </section>
+{:else}
+  <section class="card" aria-labelledby="{kind}-title">
+    <div class="row head">
+      <h2 id="{kind}-title">{title}</h2>
+      {@render splitControl()}
+    </div>
+    {@render monthlyBars()}
+    {@render children?.()}
+  </section>
+{/if}
 
 <style>
   .head {
     justify-content: space-between;
+  }
+  .bars {
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  .bars h3 {
+    margin: 0;
   }
 </style>
