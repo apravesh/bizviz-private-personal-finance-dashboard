@@ -8,8 +8,8 @@
 
 {#if $store.payload}
   {@const payload = $store.payload}
+  <SpendingChart {payload} />
   <SavingsChart {payload} />
   <EarningsChart {payload} />
-  <SpendingChart {payload} />
   <RecurringList {payload} />
 {/if}

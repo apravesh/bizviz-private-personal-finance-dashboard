@@ -10,6 +10,7 @@
 <MonthlyChart
   {payload}
   kind="spending"
+  cardTitle="Spending"
   title="Spending per month"
   splits={[
     { value: 'none', label: 'None' },

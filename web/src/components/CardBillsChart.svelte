@@ -44,4 +44,10 @@
   h3 {
     margin: 0;
   }
+  /* First in its card: no divider under the card heading. */
+  :global(h2) + .bills {
+    margin-top: 8px;
+    padding-top: 0;
+    border-top: none;
+  }
 </style>
